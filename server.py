@@ -133,12 +133,24 @@ def select_portfolio(portfolio_id):
         return redirect(url_for('upload'))
 
     # Výpočty pro portfolio
-    portfolio_value = calculate_portfolio_value(data)
-    realized_profit = calculate_realized_profit(data)
-    unrealized_profit = calculate_unrealized_profit(data)
-    total_dividends = calculate_dividend_cash(data)
+    portfolio_value = calculate_portfolio_value(data)  # Spočítáme hodnotu portfolia
+    realized_profit = calculate_realized_profit(data)  # Spočítáme realizovaný zisk
+    total_invested = calculate_invested_amount(data)  # Spočítáme investovanou částku
+
+    # Výpočet nerealizovaného zisku
+    unrealized_profit = calculate_unrealized_profit(portfolio_value, total_invested)
+
+    # Výpočty pro dividendy
+    dividend_results = calculate_dividend_cash(data)  # Spočítáme dividendy, yield, predikci a daň
+
+    # Výpočet dalších částek
+    total_dividends = dividend_results['total_dividends']
+    dividend_yield = dividend_results['dividend_yield']
+    dividend_prediction_10_years = dividend_results['dividend_prediction_10_years']
+    tax_on_dividends = dividend_results['tax_on_dividends']
+
+    # Výpočet dalších částek
     total_fees = calculate_fees(data)
-    total_invested = calculate_invested_amount(data)  # Oprava volání funkce
 
     # Zaokrouhlení výsledků
     results = {
@@ -146,8 +158,11 @@ def select_portfolio(portfolio_id):
         'realized_profit': f"{round(realized_profit, 2)} €",
         'unrealized_profit': f"{round(unrealized_profit, 2)} €",
         'total_dividends': f"{round(total_dividends, 2)} €",
+        'dividend_yield': f"{round(dividend_yield, 2)} %",
+        'dividend_prediction_10_years': f"{round(dividend_prediction_10_years, 2)} €",
+        'tax_on_dividends': f"{round(tax_on_dividends, 2)} €",
         'total_fees': f"{round(total_fees, 2)} €",
-        'invested': total_invested  # Přidáme investovanou částku do výsledků bez přídavného €
+        'invested': total_invested  # Přidáme investovanou částku do výsledků
     }
 
     # Zobrazíme výsledky portfolia
@@ -170,4 +185,6 @@ def delete_portfolio(portfolio_id):
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+
 
