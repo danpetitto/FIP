@@ -1,7 +1,8 @@
 import os
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
 import pandas as pd
-from finance import add_current_prices, calculate_portfolio_value, calculate_realized_profit, calculate_unrealized_profit, calculate_dividend_cash, calculate_fees
+from finance import add_current_prices, calculate_portfolio_value, calculate_realized_profit, calculate_unrealized_profit, calculate_dividend_cash, calculate_fees, calculate_invested_amount
+
 from models import db, User, Portfolio
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_cors import CORS
@@ -131,12 +132,13 @@ def select_portfolio(portfolio_id):
         flash(f"Chyba při získávání aktuálních cen: {str(e)}")
         return redirect(url_for('upload'))
 
-# Výpočty pro portfolio
+    # Výpočty pro portfolio
     portfolio_value = calculate_portfolio_value(data)
     realized_profit = calculate_realized_profit(data)
     unrealized_profit = calculate_unrealized_profit(data)
     total_dividends = calculate_dividend_cash(data)
     total_fees = calculate_fees(data)
+    total_invested = calculate_invested_amount(data)  # Oprava volání funkce
 
     # Zaokrouhlení výsledků
     results = {
@@ -144,7 +146,8 @@ def select_portfolio(portfolio_id):
         'realized_profit': f"{round(realized_profit, 2)} €",
         'unrealized_profit': f"{round(unrealized_profit, 2)} €",
         'total_dividends': f"{round(total_dividends, 2)} €",
-        'total_fees': f"{round(total_fees, 2)} €"
+        'total_fees': f"{round(total_fees, 2)} €",
+        'invested': total_invested  # Přidáme investovanou částku do výsledků bez přídavného €
     }
 
     # Zobrazíme výsledky portfolia
@@ -167,3 +170,4 @@ def delete_portfolio(portfolio_id):
 
 if __name__ == '__main__':
     app.run(debug=True)
+
