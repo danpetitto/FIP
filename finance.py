@@ -88,19 +88,42 @@ def add_current_prices(data):
     data['Aktuální Cena'] = data['Ticker'].apply(get_delayed_price_polygon)  # Získání zpožděné ceny
     return data
 
-#testování
+#testování investovaná částka
 
-def simple_debug_calculate_invested(data):
+# Výpočet investované částky - pouze pro otevřené (neprodané) pozice
+def calculate_invested_amount(data):
+    # Skupinujeme podle ISIN a sečteme počet akcií (kladné = nákup, záporné = prodej)
+    position_summary = data.groupby('ISIN')['Počet'].sum().reset_index()
+
+    # Filtrujeme pouze ISINy, které mají kladný součet (pozice stále otevřené)
+    open_positions_filtered = position_summary[position_summary['Počet'] > 0]
+
+    # Připojíme zpět k původnímu datasetu, abychom získali další informace (např. pořizovací cena, měna)
+    open_positions = pd.merge(open_positions_filtered, data, on='ISIN', how='left')
+
+    # Inicializujeme celkovou investovanou částku
     total_invested = 0
 
-    # Použijeme pouze kladné hodnoty ve sloupci 'Počet'
-    for _, row in data.iterrows():
-        if row['Počet'] > 0:
-            amount = row['Cena'] * row['Počet']
-            print(f"ISIN: {row['ISIN']}, Počet: {row['Počet']}, Cena: {row['Cena']}, Investovaná částka: {amount}")
-            total_invested += amount
+    # Výpočet investované částky
+    for _, row in open_positions.iterrows():
+        if row['Počet_x'] > 0:  # Pouze kladné pozice
+            currency = row['Unnamed: 8']  # Zde je měna (např. USD, CZK)
+            amount = row['Cena'] * row['Počet_x']  # Cena * Počet akcií
 
-    return f"Investováno: {round(total_invested, 2)} €"
+            if currency != 'EUR':
+                fx_rate = row['Směnný kurz']  # Použijeme směnný kurz z CSV
+                if fx_rate:
+                    amount_in_eur = amount / fx_rate  # Převod na EUR
+                else:
+                    continue  # Přeskočíme tuto pozici, pokud není dostupný směnný kurz
+            else:
+                amount_in_eur = amount  # Pokud je měna EUR, nepřevádíme
+
+            # Přičítáme investovanou částku
+            total_invested += amount_in_eur
+
+    # Vrátíme celkovou investovanou částku naformátovanou v EUR
+    return round(total_invested, 2)
 
 # Výpočet hodnoty portfolia - pouze pro otevřené (neprodané) pozice
 def calculate_portfolio_value(data):
@@ -165,3 +188,4 @@ def calculate_fees(data):
         return total_fees
     else:
         return 0
+
