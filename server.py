@@ -2,7 +2,7 @@ import os
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
 import pandas as pd
 from finance import add_current_prices, calculate_portfolio_value, calculate_realized_profit, calculate_unrealized_profit, calculate_dividend_cash, calculate_fees, calculate_invested_amount
-
+from werkzeug.security import check_password_hash
 from models import db, User, Portfolio
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_cors import CORS
@@ -185,6 +185,7 @@ def delete_portfolio(portfolio_id):
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
 
