@@ -5,6 +5,7 @@ from portfolio import portfolio_bp
 from flask_login import LoginManager
 from flask_migrate import Migrate
 from config import Config  # Načteme konfiguraci z config.py
+from extensions import mail  # Importujeme mail z extensions.py
 
 app = Flask(__name__)
 
@@ -13,6 +14,9 @@ app.config.from_object(Config)
 
 # Inicializace SQLAlchemy s aplikací
 db.init_app(app)
+
+# Inicializace Flask-Mail
+mail.init_app(app)
 
 # Flask-Migrate inicializace
 migrate = Migrate(app, db)
