@@ -6,8 +6,12 @@ from finance import (
     calculate_unrealized_profit, calculate_invested_amount, calculate_dividend_cash, 
     calculate_fees
 )
+from portfolio_analysis import (
+    get_ticker_from_isin, get_delayed_price_polygon
+)
 import pandas as pd
 from io import BytesIO
+import time
 
 portfolio_bp = Blueprint('portfolio', __name__)
 
@@ -17,12 +21,12 @@ portfolio_bp = Blueprint('portfolio', __name__)
 def upload():
     if request.method == 'POST':
         # Diagnostika: Výpis obsahu request.form a request.files
-        print("Form Data: ", request.form)  # Zobrazí data formuláře
-        print("File Data: ", request.files)  # Zobrazí data souborů
+        print("Form Data: ", request.form)
+        print("File Data: ", request.files)
 
         # Získání souboru a názvu portfolia z formuláře
-        file = request.files.get('file')  # Používáme get() pro bezpečné získání souboru
-        portfolio_name = request.form.get('portfolio_name')  # Používáme get() pro volné získání názvu portfolia
+        file = request.files.get('file')
+        portfolio_name = request.form.get('portfolio_name')
 
         # Kontrola, zda byl soubor nahrán a portfolio má název
         if not file or not portfolio_name:
@@ -36,10 +40,10 @@ def upload():
 
         # Uložení nového portfolia do databáze
         new_portfolio = Portfolio(
-            name=portfolio_name,  # Libovolně definovatelný název portfolia
+            name=portfolio_name,
             filename=file.filename,
             data=file.read(),
-            user=current_user  # Oprava na 'user'
+            user=current_user
         )
         db.session.add(new_portfolio)
         db.session.commit()
@@ -58,7 +62,7 @@ def select_portfolio(portfolio_id):
     portfolio = Portfolio.query.get_or_404(portfolio_id)
 
     # Kontrola, zda portfolio patří přihlášenému uživateli
-    if portfolio.user != current_user:  # Změna z 'owner' na 'user'
+    if portfolio.user != current_user:
         flash('Nemáte oprávnění k zobrazení tohoto portfolia.', 'error')
         return redirect(url_for('portfolio.upload'))
 
@@ -70,7 +74,8 @@ def select_portfolio(portfolio_id):
         flash('Soubor je prázdný nebo neplatný.', 'error')
         return redirect(url_for('portfolio.upload'))
 
-    # Přidání aktuálních cen a výpočet hodnoty portfolia
+    # **Výpočty pro "Výsledky portfolia" pomocí funkcí z finance.py**
+    # Přidání aktuálních cen
     data = add_current_prices(data)
     portfolio_value = calculate_portfolio_value(data)
 
@@ -89,7 +94,7 @@ def select_portfolio(portfolio_id):
     # Výpočet poplatků
     total_fees = calculate_fees(data)
 
-    # Zaokrouhlení výsledků a sestavení slovníku výsledků
+    # **Vytvoření slovníku s výsledky portfolia**
     results = {
         'portfolio_value': f"{round(portfolio_value, 2)} €",
         'realized_profit': f"{round(realized_profit, 2)} €",
@@ -102,7 +107,23 @@ def select_portfolio(portfolio_id):
         'invested': f"{round(total_invested, 2)} €"
     }
 
-    return render_template('process.html', results=results, portfolio=portfolio)
+    # **Zpracování pro "Informace o akciích" pomocí funkcí z portfolio_analysis.py**
+    # Filtrujeme pouze akcie, které mají kladný počet (otevřené pozice)
+    open_positions = data[data['Počet'] > 0]
+
+    # Získání informací o akciích (ticker, kupní hodnota, aktuální hodnota, profit)
+    stock_info_list = []
+    for _, row in open_positions.iterrows():
+        stock_info = {
+            'ticker': row['Ticker'],
+            'kupni_hodnota': row['Cena'] * row['Počet'],
+            'aktualni_hodnota': row['Aktuální Cena'] * row['Počet'],
+            'profit': (row['Aktuální Cena'] * row['Počet']) - (row['Cena'] * row['Počet'])
+        }
+        stock_info_list.append(stock_info)
+
+    # **Předání výsledků do šablony**
+    return render_template('process.html', results=results, stock_info_list=stock_info_list, portfolio=portfolio)
 
 # Route pro smazání portfolia
 @portfolio_bp.route('/delete_portfolio/<int:portfolio_id>', methods=['POST'])
@@ -119,3 +140,4 @@ def delete_portfolio(portfolio_id):
     db.session.commit()
     flash('Portfolio bylo úspěšně smazáno.', 'success')
     return redirect(url_for('portfolio.upload'))
+
