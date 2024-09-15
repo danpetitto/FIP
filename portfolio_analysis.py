@@ -57,52 +57,80 @@ def get_delayed_price_polygon(ticker):
         print(f"Chyba při načítání ceny pro {ticker}: {str(e)}")
     return None
 
-# Funkce pro zpracování otevřených pozic, které nebyly prodány
-def analyze_open_positions(data):
-    # Krok 1: Skupinování podle ISIN a sečtení všech nákupů a prodejů (kladné = nákup, záporné = prodej)
+import pandas as pd
+
+def analyze_open_positions(data, tickers_prices):
+    # Opatření 1: Součet všech transakcí pro každý ISIN
     position_summary = data.groupby('ISIN')['Počet'].sum().reset_index()
-
-    # Krok 2: Filtrování pouze těch ISINů, kde zůstává kladný počet akcií (pozice stále otevřené)
+    
+    # Opatření 2: Filtrování pouze kladných počtů (otevřené pozice)
     open_positions_filtered = position_summary[position_summary['Počet'] > 0]
+    
+    # Opatření 3: Odstranění duplicitních ISIN
+    open_positions_filtered = open_positions_filtered.drop_duplicates(subset=['ISIN'])
 
-    # Krok 3: Spojení s původními daty pro získání dalších informací (pořizovací cena, transakční data)
-    open_positions = pd.merge(open_positions_filtered, data, on='ISIN', how='left')
+    # Opatření 4: Mapování tickerů na ISIN
+    open_positions_filtered['Ticker'] = open_positions_filtered['ISIN'].map(tickers_prices['ticker'])
+    
+    # Opatření 5: Mapování aktuální ceny na ISIN
+    open_positions_filtered['Aktuální Cena'] = open_positions_filtered['ISIN'].map(tickers_prices['current_price'])
+    
+    # Opatření 6: Odstranění řádků, kde chybí ticker nebo aktuální cena
+    open_positions_filtered = open_positions_filtered.dropna(subset=['Ticker', 'Aktuální Cena'])
 
-    # Krok 4: Získání tickeru pro každou otevřenou pozici
-    open_positions['Ticker'] = open_positions['ISIN'].apply(get_ticker_from_isin)
+    # Opatření 7: Spojení s původními daty pro získání nákupní ceny (unikátní ISINy)
+    open_positions_filtered = pd.merge(open_positions_filtered, data[['ISIN', 'Cena']].drop_duplicates(subset=['ISIN']), on='ISIN', how='left')
+    
+    # Opatření 8: Zajištění, že nejsou žádné nulové nebo neplatné ceny
+    open_positions_filtered = open_positions_filtered[open_positions_filtered['Cena'] > 0]
 
-    # Krok 5: Získání aktuální (zpožděné) ceny pro každou otevřenou pozici
-    open_positions['Aktuální Cena'] = open_positions['Ticker'].apply(get_delayed_price_polygon)
+    # Opatření 9: Výpočet nákupní hodnoty (Cena * Počet)
+    open_positions_filtered['Nákupní Hodnota'] = open_positions_filtered['Cena'] * open_positions_filtered['Počet']
 
-    # Krok 6: Výpočet nákupní hodnoty (Cena * Počet z původních dat)
-    open_positions['Nákupní Hodnota'] = open_positions['Cena'] * open_positions['Počet_y']
+    # Opatření 10: Výpočet aktuální hodnoty (Aktuální cena * Počet)
+    open_positions_filtered['Aktuální Hodnota'] = open_positions_filtered['Aktuální Cena'] * open_positions_filtered['Počet']
 
-    # Krok 7: Výpočet aktuální hodnoty (Aktuální cena * Počet z původních dat)
-    open_positions['Aktuální Hodnota'] = open_positions['Aktuální Cena'] * open_positions['Počet_y']
+    # Výpočet profitu
+    open_positions_filtered['Profit'] = open_positions_filtered['Aktuální Hodnota'] - open_positions_filtered['Nákupní Hodnota']
 
-    # Krok 8: Výpočet profitu (Aktuální hodnota - Nákupní hodnota)
-    open_positions['Profit'] = open_positions['Aktuální Hodnota'] - open_positions['Nákupní Hodnota']
+    # Zobrazení finálních výsledků po všech opatřeních
+    print("\nFinální otevřené pozice po aplikaci všech opatření:")
+    print(open_positions_filtered[['ISIN', 'Ticker', 'Počet', 'Cena', 'Nákupní Hodnota', 'Aktuální Hodnota', 'Profit']])
 
-    # Zobrazit pouze otevřené pozice (neprodány)
-    print("\nOtevřené pozice:")
-    print(open_positions[['ISIN', 'Ticker', 'Počet_y', 'Cena', 'Nákupní Hodnota', 'Aktuální Hodnota', 'Profit']])
-
-    # Vrátit výsledný dataframe s rozebranými pozicemi
-    return open_positions[['ISIN', 'Ticker', 'Počet_y', 'Cena', 'Nákupní Hodnota', 'Aktuální Hodnota', 'Profit']]
+    # Návrat výsledného dataframe
+    return open_positions_filtered[['ISIN', 'Ticker', 'Počet', 'Cena', 'Nákupní Hodnota', 'Aktuální Hodnota', 'Profit']]
 
 # Testovací funkce (příklad použití)
 def main():
-    # Příklad dat (můžeš nahradit skutečnými daty)
-    data = {
-        'ISIN': ['US88160R1014', 'US0231351067', 'GB00BLFHRK18'],
-        'Počet': [10, 15, 0],  # 0 znamená prodané, > 0 znamená otevřené pozice
-        'Cena': [200, 150, 5]  # Nákupní cena
+    # Příklad slovníku s tickers_prices (nahraď skutečnými daty)
+    tickers_prices = {
+        'ticker': {
+            'US88160R1014': 'TSLA', 
+            'US0231351067': 'AMZN', 
+            'GB00BLFHRK18': 'CEZ',
+            'GB00BF3ZNS54': 'VEN'
+        },
+        'current_price': {
+            'US88160R1014': 230.29, 
+            'US0231351067': 186.49, 
+            'GB00BLFHRK18': 27.615,
+            'GB00BF3ZNS54': 5.00
+        }
     }
-    data = pd.DataFrame(data)
 
-    # Analyzovat otevřené pozice
-    open_positions = analyze_open_positions(data)
+    # Příklad testovacích dat (představuje transakce)
+    data = pd.DataFrame({
+        'ISIN': ['US88160R1014', 'US0231351067', 'GB00BLFHRK18', 'US88160R1014', 'GB00BF3ZNS54'],
+        'Počet': [2, -2, 5, 1, 10],
+        'Cena': [200, 150, 5, 190, 0]
+    })
+
+    # Spuštění analýzy otevřených pozic s 10 opatřeními
+    open_positions = analyze_open_positions(data, tickers_prices)
+    print("\nVýsledné otevřené pozice:")
     print(open_positions)
 
 if __name__ == "__main__":
     main()
+
+
