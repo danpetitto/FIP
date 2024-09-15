@@ -11,19 +11,36 @@ from portfolio_analysis import (
 )
 import pandas as pd
 from io import BytesIO
-import time
 
 portfolio_bp = Blueprint('portfolio', __name__)
+
+# Funkce pro výpočet výsledků portfolia (včetně načtení tickerů a cen)
+def calculate_portfolio_results(data):
+    tickers_prices = {
+        'ticker': {},
+        'current_price': {}
+    }
+
+    # Získání tickerů a cen pro každou jedinečnou ISIN
+    unique_isins = data['ISIN'].unique()
+    for isin in unique_isins:
+        ticker = get_ticker_from_isin(isin)
+        current_price = get_delayed_price_polygon(ticker)
+
+        # Uložení do slovníku
+        tickers_prices['ticker'][isin] = ticker
+        tickers_prices['current_price'][isin] = current_price
+
+    # Výpočet hodnoty portfolia s těmito cenami
+    portfolio_value = calculate_portfolio_value(data)
+
+    return tickers_prices, portfolio_value
 
 # Route pro nahrávání nového portfolia
 @portfolio_bp.route('/upload', methods=['GET', 'POST'])
 @login_required
 def upload():
     if request.method == 'POST':
-        # Diagnostika: Výpis obsahu request.form a request.files
-        print("Form Data: ", request.form)
-        print("File Data: ", request.files)
-
         # Získání souboru a názvu portfolia z formuláře
         file = request.files.get('file')
         portfolio_name = request.form.get('portfolio_name')
@@ -74,55 +91,49 @@ def select_portfolio(portfolio_id):
         flash('Soubor je prázdný nebo neplatný.', 'error')
         return redirect(url_for('portfolio.upload'))
 
-    # **Výpočty pro "Výsledky portfolia" pomocí funkcí z finance.py**
-    # Přidání aktuálních cen
-    data = add_current_prices(data)
-    portfolio_value = calculate_portfolio_value(data)
+    # Získání tickerů a aktuálních cen pro ISINy
+    tickers_prices, portfolio_value = calculate_portfolio_results(data)
 
-    # Výpočet realizovaného a nerealizovaného zisku
-    realized_profit = calculate_realized_profit(data)
-    total_invested = calculate_invested_amount(data)
-    unrealized_profit = calculate_unrealized_profit(portfolio_value, total_invested)
+    # Opatření 1: Agregace transakcí podle ISIN
+    aggregated_data = data.groupby('ISIN')['Počet'].sum().reset_index()
 
-    # Výpočet dividend
-    dividend_results = calculate_dividend_cash(data)
-    total_dividends = dividend_results['total_dividends']
-    dividend_yield = dividend_results['dividend_yield']
-    dividend_prediction_10_years = dividend_results['dividend_prediction_10_years']
-    tax_on_dividends = dividend_results['tax_on_dividends']
+    # Opatření 2: Filtrování pouze otevřených pozic (kladný počet)
+    open_positions = aggregated_data[aggregated_data['Počet'] > 0]
 
-    # Výpočet poplatků
-    total_fees = calculate_fees(data)
-
-    # **Vytvoření slovníku s výsledky portfolia**
-    results = {
-        'portfolio_value': f"{round(portfolio_value, 2)} €",
-        'realized_profit': f"{round(realized_profit, 2)} €",
-        'unrealized_profit': f"{round(unrealized_profit, 2)} €",
-        'total_dividends': f"{round(total_dividends, 2)} €",
-        'dividend_yield': f"{round(dividend_yield, 2)} %",
-        'dividend_prediction_10_years': f"{round(dividend_prediction_10_years, 2)} €",
-        'tax_on_dividends': f"{round(tax_on_dividends, 2)} €",
-        'total_fees': f"{round(total_fees, 2)} €",
-        'invested': f"{round(total_invested, 2)} €"
-    }
-
-    # **Zpracování pro "Informace o akciích" pomocí funkcí z portfolio_analysis.py**
-    # Filtrujeme pouze akcie, které mají kladný počet (otevřené pozice)
-    open_positions = data[data['Počet'] > 0]
-
-    # Získání informací o akciích (ticker, kupní hodnota, aktuální hodnota, profit)
+    # Opatření 3: Kontrola ISIN, ticker a aktuální cena
     stock_info_list = []
     for _, row in open_positions.iterrows():
-        stock_info = {
-            'ticker': row['Ticker'],
-            'kupni_hodnota': row['Cena'] * row['Počet'],
-            'aktualni_hodnota': row['Aktuální Cena'] * row['Počet'],
-            'profit': (row['Aktuální Cena'] * row['Počet']) - (row['Cena'] * row['Počet'])
-        }
-        stock_info_list.append(stock_info)
+        isin = row['ISIN']
+        ticker = tickers_prices['ticker'].get(isin)
+        current_price = tickers_prices['current_price'].get(isin)
 
-    # **Předání výsledků do šablony**
+        # Ověř, že ticker a cena nejsou None
+        if ticker and current_price:
+            # Opatření 4: Průměrná nákupní cena z dat
+            kupni_hodnota = data[data['ISIN'] == isin]['Cena'].mean() * row['Počet']
+            aktualni_hodnota = current_price * row['Počet']
+            profit = aktualni_hodnota - kupni_hodnota
+
+            stock_info = {
+                'ticker': ticker,
+                'kupni_hodnota': kupni_hodnota,
+                'aktualni_hodnota': aktualni_hodnota,
+                'profit': profit
+            }
+            stock_info_list.append(stock_info)
+        else:
+            print(f"Chybí data pro ISIN: {isin}")
+
+    # Předání výsledků do šablony
+    results = {
+        'portfolio_value': f"{round(portfolio_value, 2)} €",
+        'realized_profit': f"{round(calculate_realized_profit(data), 2)} €",
+        'unrealized_profit': f"{round(calculate_unrealized_profit(portfolio_value, calculate_invested_amount(data)), 2)} €",
+        'total_dividends': f"{round(calculate_dividend_cash(data)['total_dividends'], 2)} €",
+        'total_fees': f"{round(calculate_fees(data), 2)} €",
+        'invested': f"{round(calculate_invested_amount(data), 2)} €"
+    }
+
     return render_template('process.html', results=results, stock_info_list=stock_info_list, portfolio=portfolio)
 
 # Route pro smazání portfolia
@@ -131,7 +142,6 @@ def select_portfolio(portfolio_id):
 def delete_portfolio(portfolio_id):
     portfolio_to_delete = Portfolio.query.get_or_404(portfolio_id)
 
-    # Kontrola, zda portfolio patří přihlášenému uživateli
     if portfolio_to_delete.owner != current_user:
         flash('Nemáte oprávnění smazat toto portfolio.', 'error')
         return redirect(url_for('portfolio.upload'))
@@ -140,4 +150,3 @@ def delete_portfolio(portfolio_id):
     db.session.commit()
     flash('Portfolio bylo úspěšně smazáno.', 'success')
     return redirect(url_for('portfolio.upload'))
-
