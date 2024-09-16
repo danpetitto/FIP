@@ -5,25 +5,24 @@ import pandas as pd
 from dotenv import load_dotenv
 from cachetools import TTLCache
 import matplotlib.pyplot as plt
-
+from tkinter import Tk
+from tkinter.filedialog import askopenfilename
 
 # Načtení API klíčů z .env souboru
 load_dotenv()
 OPENFIGI_API_KEY = os.getenv('OPENFIGI_API_KEY')
 POLYGON_API_KEY = os.getenv('POLYGON_API_KEY')
 
-# Cache s časovým omezením (TTLCache) pro ISINy a tickery
+# Cache s časovým omezením (TTLCache) pro ISINy a tickery a sektory
 ticker_cache = TTLCache(maxsize=100, ttl=3600)  # Cache platí 1 hodinu
+sector_cache = TTLCache(maxsize=100, ttl=3600)  # Cache pro sektory
 
 # Funkce pro získání tickeru z OpenFIGI API na základě ISIN
 def get_ticker_from_isin(isin):
-    # Zkontrolujeme, zda je ISIN v cache
     if isin in ticker_cache:
         return ticker_cache[isin]
-
-    # Pauza mezi voláními API (zabraňuje překročení limitu požadavků)
-    time.sleep(2)  # Pauza 2 sekundy mezi voláními API
     
+    time.sleep(2)  # Pauza 2 sekundy mezi voláními API
     headers = {
         'Content-Type': 'application/json',
         'X-OPENFIGI-APIKEY': OPENFIGI_API_KEY
@@ -46,9 +45,7 @@ def get_delayed_price_polygon(ticker):
     if not ticker:
         return None
     try:
-        # Pauza mezi voláními API (pro Polygon.io)
         time.sleep(1)
-        
         url = f"https://api.polygon.io/v2/aggs/ticker/{ticker}/prev?adjusted=true&apiKey={POLYGON_API_KEY}"
         response = requests.get(url)
         if response.status_code == 200:
@@ -59,78 +56,97 @@ def get_delayed_price_polygon(ticker):
         print(f"Chyba při načítání ceny pro {ticker}: {str(e)}")
     return None
 
-import pandas as pd
+# Funkce pro získání odvětví na základě ticker symbolu (Polygon.io)
+def get_sector_from_ticker(ticker):
+    if ticker in sector_cache:
+        return sector_cache[ticker]
 
+    try:
+        url = f"https://api.polygon.io/v3/reference/tickers/{ticker}?apiKey={POLYGON_API_KEY}"
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            sector = data.get('results', {}).get('sic_description')  # Načtení odvětví
+            if sector:
+                sector_cache[ticker] = sector  # Uložení sektoru do cache
+            return sector
+        else:
+            print(f"Chyba při načítání odvětví pro {ticker}: {response.text}")
+    except Exception as e:
+        print(f"Chyba při načítání odvětví pro {ticker}: {str(e)}")
+    
+    return None
+
+# Funkce pro analýzu otevřených pozic
 def analyze_open_positions(data, tickers_prices):
-    # Opatření 1: Součet všech transakcí pro každý ISIN
     position_summary = data.groupby('ISIN')['Počet'].sum().reset_index()
-    
-    # Opatření 2: Filtrování pouze kladných počtů (otevřené pozice)
     open_positions_filtered = position_summary[position_summary['Počet'] > 0]
-    
-    # Opatření 3: Odstranění duplicitních ISIN
     open_positions_filtered = open_positions_filtered.drop_duplicates(subset=['ISIN'])
-
-    # Opatření 4: Mapování tickerů na ISIN
     open_positions_filtered['Ticker'] = open_positions_filtered['ISIN'].map(tickers_prices['ticker'])
-    
-    # Opatření 5: Mapování aktuální ceny na ISIN
     open_positions_filtered['Aktuální Cena'] = open_positions_filtered['ISIN'].map(tickers_prices['current_price'])
-    
-    # Opatření 6: Odstranění řádků, kde chybí ticker nebo aktuální cena
     open_positions_filtered = open_positions_filtered.dropna(subset=['Ticker', 'Aktuální Cena'])
-
-    # Opatření 7: Spojení s původními daty pro získání nákupní ceny (unikátní ISINy)
     open_positions_filtered = pd.merge(open_positions_filtered, data[['ISIN', 'Cena']].drop_duplicates(subset=['ISIN']), on='ISIN', how='left')
-    
-    # Opatření 8: Zajištění, že nejsou žádné nulové nebo neplatné ceny
     open_positions_filtered = open_positions_filtered[open_positions_filtered['Cena'] > 0]
-
-    # Opatření 9: Výpočet nákupní hodnoty (Cena * Počet)
     open_positions_filtered['Nákupní Hodnota'] = open_positions_filtered['Cena'] * open_positions_filtered['Počet']
-
-    # Opatření 10: Výpočet aktuální hodnoty (Aktuální cena * Počet)
     open_positions_filtered['Aktuální Hodnota'] = open_positions_filtered['Aktuální Cena'] * open_positions_filtered['Počet']
-
-    # Výpočet profitu
     open_positions_filtered['Profit'] = open_positions_filtered['Aktuální Hodnota'] - open_positions_filtered['Nákupní Hodnota']
-
-    # Zobrazení finálních výsledků po všech opatřeních
-    print("\nFinální otevřené pozice po aplikaci všech opatření:")
-    print(open_positions_filtered[['ISIN', 'Ticker', 'Počet', 'Cena', 'Nákupní Hodnota', 'Aktuální Hodnota', 'Profit']])
-
-    # Návrat výsledného dataframe
     return open_positions_filtered[['ISIN', 'Ticker', 'Počet', 'Cena', 'Nákupní Hodnota', 'Aktuální Hodnota', 'Profit']]
 
-# Testovací funkce (příklad použití)
+# Funkce pro vykreslení grafu rozložení investic
+def plot_investment_distribution(open_positions):
+    total_invested = open_positions['Nákupní Hodnota'].sum()
+    open_positions['Percent Invested'] = (open_positions['Nákupní Hodnota'] / total_invested) * 100
+    open_positions_sorted = open_positions.sort_values('Percent Invested', ascending=False)
+
+    plt.figure(figsize=(10, 6))
+    plt.bar(open_positions_sorted['Ticker'], open_positions_sorted['Percent Invested'], color='lightblue')
+    plt.xlabel('Akcie')
+    plt.ylabel('Procento zainvestováno')
+    plt.title('Rozložení investic do akcií')
+    plt.show()
+
+# Funkce pro načtení dat z CSV souboru
+def load_data_from_csv():
+    Tk().withdraw()  # Skryje hlavní okno Tkinter
+    file_path = askopenfilename(filetypes=[("CSV files", "*.csv")])  # Otevře dialogové okno pro výběr souboru
+    if not file_path:
+        print("Nebyl vybrán žádný soubor.")
+        return None
+    try:
+        data = pd.read_csv(file_path)
+        return data
+    except Exception as e:
+        print(f"Chyba při načítání souboru: {str(e)}")
+        return None
+
+# Hlavní funkce programu
 def main():
-    # Příklad slovníku s tickers_prices (nahraď skutečnými daty)
-    tickers_prices = {
-        'ticker': {
-            'US88160R1014': 'TSLA', 
-            'US0231351067': 'AMZN', 
-            'GB00BLFHRK18': 'CEZ',
-            'GB00BF3ZNS54': 'VEN'
-        },
-        'current_price': {
-            'US88160R1014': 230.29, 
-            'US0231351067': 186.49, 
-            'GB00BLFHRK18': 27.615,
-            'GB00BF3ZNS54': 5.00
+    # Načti data z CSV souboru (uživatel nahrává CSV)
+    data = load_data_from_csv()
+    
+    if data is not None:
+        tickers_prices = {
+            'ticker': {
+                'US88160R1014': 'TSLA', 
+                'US0231351067': 'AMZN', 
+                'GB00BLFHRK18': 'CEZ',
+                'GB00BF3ZNS54': 'VEN'
+            },
+            'current_price': {
+                'US88160R1014': 230.29, 
+                'US0231351067': 186.49, 
+                'GB00BLFHRK18': 27.615,
+                'GB00BF3ZNS54': 5.00
+            }
         }
-    }
 
-    # Příklad testovacích dat (představuje transakce)
-    data = pd.DataFrame({
-        'ISIN': ['US88160R1014', 'US0231351067', 'GB00BLFHRK18', 'US88160R1014', 'GB00BF3ZNS54'],
-        'Počet': [2, -2, 5, 1, 10],
-        'Cena': [200, 150, 5, 190, 0]
-    })
+        # Spuštění analýzy otevřených pozic
+        open_positions = analyze_open_positions(data, tickers_prices)
 
-    # Spuštění analýzy otevřených pozic s 10 opatřeními
-    open_positions = analyze_open_positions(data, tickers_prices)
-    print("\nVýsledné otevřené pozice:")
-    print(open_positions)
+        # Zobrazit graf rozložení investic
+        plot_investment_distribution(open_positions)
+    else:
+        print("Nepodařilo se načíst data z CSV.")
 
 if __name__ == "__main__":
     main()
