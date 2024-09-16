@@ -83,13 +83,13 @@
             </div>
         </div>
 
-        <!-- Skryté elementy pro předání dat do JS -->
-        <div id="sectorChartLabels" style="display:none;">{{ stock_labels | tojson }}</div>
-        <div id="sectorChartData" style="display:none;">{{ stock_percentages | tojson }}</div>
+<!-- Skryté elementy pro předání dat do JS -->
+<div id="sectorChartLabels" style="display:none;">{{ stock_labels | tojson }}</div>
+<div id="sectorChartData" style="display:none;">{{ stock_percentages | tojson }}</div>
 
-        <!-- Nové prvky pro jednotlivé pozice -->
-        <div id="positionChartLabels" style="display:none;">{{ stock_info_list | map(attribute='ticker') | list | tojson }}</div>
-        <div id="positionChartData" style="display:none;">{{ stock_info_list | map(attribute='kupni_hodnota') | list | tojson }}</div>
+<!-- Nové prvky pro jednotlivé pozice -->
+<div id="positionChartLabels" style="display:none;">{{ stock_info_list | map(attribute='ticker') | list | tojson }}</div>
+<div id="positionChartData" style="display:none;">{{ position_percentages | tojson }}</div>
 
     </div>
 
@@ -154,3 +154,4 @@
         });
     </script>
 {% endblock %}
+
