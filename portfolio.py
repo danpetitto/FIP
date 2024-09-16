@@ -7,31 +7,34 @@ from finance import (
     calculate_fees
 )
 from portfolio_analysis import (
-    get_ticker_from_isin, get_delayed_price_polygon
+    get_ticker_from_isin, get_delayed_price_polygon, get_sector_from_ticker
 )
 import pandas as pd
 from io import BytesIO
 
 portfolio_bp = Blueprint('portfolio', __name__)
 
-# Funkce pro výpočet výsledků portfolia (včetně načtení tickerů a cen)
+# Funkce pro výpočet výsledků portfolia (včetně načtení tickerů, cen a sektorů)
 def calculate_portfolio_results(data):
     tickers_prices = {
         'ticker': {},
-        'current_price': {}
+        'current_price': {},
+        'sector': {}
     }
 
-    # Získání tickerů a cen pro každou jedinečnou ISIN
+    # Získání tickerů, cen a odvětví pro každou jedinečnou ISIN
     unique_isins = data['ISIN'].unique()
     for isin in unique_isins:
         ticker = get_ticker_from_isin(isin)
         current_price = get_delayed_price_polygon(ticker)
+        sector = get_sector_from_ticker(ticker)
 
         # Uložení do slovníku
         tickers_prices['ticker'][isin] = ticker
         tickers_prices['current_price'][isin] = current_price
+        tickers_prices['sector'][isin] = sector
 
-    # Výpočet hodnoty portfolia s těmito cenami
+    # Výpočet hodnoty portfolia
     portfolio_value = calculate_portfolio_value(data)
 
     return tickers_prices, portfolio_value
@@ -91,38 +94,58 @@ def select_portfolio(portfolio_id):
         flash('Soubor je prázdný nebo neplatný.', 'error')
         return redirect(url_for('portfolio.upload'))
 
-    # Získání tickerů a aktuálních cen pro ISINy
+    # Získání tickerů, aktuálních cen a odvětví pro ISINy
     tickers_prices, portfolio_value = calculate_portfolio_results(data)
 
-    # Opatření 1: Agregace transakcí podle ISIN
+    # Agregace transakcí podle ISIN
     aggregated_data = data.groupby('ISIN')['Počet'].sum().reset_index()
 
-    # Opatření 2: Filtrování pouze otevřených pozic (kladný počet)
+    # Filtrování pouze otevřených pozic (kladný počet)
     open_positions = aggregated_data[aggregated_data['Počet'] > 0]
 
-    # Opatření 3: Kontrola ISIN, ticker a aktuální cena
-    stock_info_list = []
+    # Seskupení podle odvětví a výpočet investovaných částek
+    sector_investments = {}
+    stock_info_list = []  # Pro zobrazení informací o jednotlivých akciích
+
     for _, row in open_positions.iterrows():
         isin = row['ISIN']
         ticker = tickers_prices['ticker'].get(isin)
         current_price = tickers_prices['current_price'].get(isin)
+        sector = tickers_prices['sector'].get(isin)
 
-        # Ověř, že ticker a cena nejsou None
-        if ticker and current_price:
-            # Opatření 4: Průměrná nákupní cena z dat
-            kupni_hodnota = data[data['ISIN'] == isin]['Cena'].mean() * row['Počet']
-            aktualni_hodnota = current_price * row['Počet']
-            profit = aktualni_hodnota - kupni_hodnota
+        # Zobrazit akcie i v případě, že nemají cenu nebo ticker
+        kupni_hodnota = data[data['ISIN'] == isin]['Cena'].mean() * row['Počet']
+        aktualni_hodnota = current_price * row['Počet'] if current_price else 0  # Pokud chybí cena, nastavíme ji na 0
+        profit = aktualni_hodnota - kupni_hodnota
 
-            stock_info = {
-                'ticker': ticker,
-                'kupni_hodnota': kupni_hodnota,
-                'aktualni_hodnota': aktualni_hodnota,
-                'profit': profit
-            }
-            stock_info_list.append(stock_info)
+        stock_info = {
+            'ticker': ticker if ticker else 'Neznámý',  # Pokud není ticker, použije se 'Neznámý'
+            'kupni_hodnota': kupni_hodnota,
+            'aktualni_hodnota': aktualni_hodnota,
+            'profit': profit,
+            'sector': sector if sector else 'Neznámý'  # Pokud není sektor, použije se 'Neznámý'
+        }
+        stock_info_list.append(stock_info)
+
+        # Přidání investice k příslušnému odvětví
+        if sector in sector_investments:
+            sector_investments[sector] += kupni_hodnota
         else:
-            print(f"Chybí data pro ISIN: {isin}")
+            sector_investments[sector] = kupni_hodnota
+
+    # Převedení investic podle odvětví do seznamu pro graf
+    sector_labels = list(sector_investments.keys())
+    sector_percentages = list(sector_investments.values())
+    total_invested = sum(sector_percentages)
+    
+    if total_invested > 0:
+        sector_percentages = [(x / total_invested) * 100 for x in sector_percentages]
+    else:
+        sector_percentages = [0 for _ in sector_percentages]
+
+    # Ověření, že sektory a investice jsou platné (žádné None hodnoty)
+    sector_labels = [label if label is not None else 'Neznámé' for label in sector_labels]
+    sector_percentages = [percentage if percentage is not None else 0 for percentage in sector_percentages]
 
     # Předání výsledků do šablony
     results = {
@@ -134,7 +157,12 @@ def select_portfolio(portfolio_id):
         'invested': f"{round(calculate_invested_amount(data), 2)} €"
     }
 
-    return render_template('process.html', results=results, stock_info_list=stock_info_list, portfolio=portfolio)
+    return render_template('process.html',
+                           results=results,
+                           stock_info_list=stock_info_list,
+                           stock_labels=sector_labels or [],  # Prázdný seznam pokud je None
+                           stock_percentages=sector_percentages or [],  # Prázdný seznam pokud je None
+                           portfolio=portfolio)
 
 # Route pro smazání portfolia
 @portfolio_bp.route('/delete_portfolio/<int:portfolio_id>', methods=['POST'])
@@ -150,3 +178,4 @@ def delete_portfolio(portfolio_id):
     db.session.commit()
     flash('Portfolio bylo úspěšně smazáno.', 'success')
     return redirect(url_for('portfolio.upload'))
+
