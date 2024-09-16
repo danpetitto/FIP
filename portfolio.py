@@ -133,6 +133,15 @@ def select_portfolio(portfolio_id):
         else:
             sector_investments[sector] = kupni_hodnota
 
+    # Výpočet procentuální investice do jednotlivých akcií
+    total_invested_positions = sum([info['kupni_hodnota'] for info in stock_info_list])
+
+    position_percentages = []
+    if total_invested_positions > 0:
+        position_percentages = [(info['kupni_hodnota'] / total_invested_positions) * 100 for info in stock_info_list]
+    else:
+        position_percentages = [0 for _ in stock_info_list]
+
     # Převedení investic podle odvětví do seznamu pro graf
     sector_labels = list(sector_investments.keys())
     sector_percentages = list(sector_investments.values())
@@ -162,6 +171,7 @@ def select_portfolio(portfolio_id):
                            stock_info_list=stock_info_list,
                            stock_labels=sector_labels or [],  # Prázdný seznam pokud je None
                            stock_percentages=sector_percentages or [],  # Prázdný seznam pokud je None
+                           position_percentages=position_percentages or [],  # Nové procentní investice pro jednotlivé akcie
                            portfolio=portfolio)
 
 # Route pro smazání portfolia
@@ -178,4 +188,3 @@ def delete_portfolio(portfolio_id):
     db.session.commit()
     flash('Portfolio bylo úspěšně smazáno.', 'success')
     return redirect(url_for('portfolio.upload'))
-
