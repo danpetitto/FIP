@@ -4,6 +4,8 @@ import time
 import pandas as pd
 from dotenv import load_dotenv
 from cachetools import TTLCache
+import matplotlib.pyplot as plt
+
 
 # Načtení API klíčů z .env souboru
 load_dotenv()
@@ -132,5 +134,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
