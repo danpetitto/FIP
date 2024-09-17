@@ -33,10 +33,15 @@
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Investovaná částka:</strong> 
-                            <span>{{ results.invested }}</span>
+                            <span>{{ results.invested }} €</span>
                         </li>
                     </ul>
                 </div>
+                
+                <!-- Odkaz na detaily investic -->
+                <div class="text-center mb-4">
+                    <a href="{{ url_for('portfolio.investment_details') }}" class="btn btn-primary">Zobrazit detaily investic</a>
+                </div>                
             </div>
         </div>
 
@@ -83,14 +88,13 @@
             </div>
         </div>
 
-<!-- Skryté elementy pro předání dat do JS -->
-<div id="sectorChartLabels" style="display:none;">{{ stock_labels | tojson }}</div>
-<div id="sectorChartData" style="display:none;">{{ stock_percentages | tojson }}</div>
+        <!-- Skryté elementy pro předání dat do JS -->
+        <div id="sectorChartLabels" style="display:none;">{{ stock_labels | default([]) | tojson }}</div>
+        <div id="sectorChartData" style="display:none;">{{ stock_percentages | default([]) | tojson }}</div>
 
-<!-- Nové prvky pro jednotlivé pozice -->
-<div id="positionChartLabels" style="display:none;">{{ stock_info_list | map(attribute='ticker') | list | tojson }}</div>
-<div id="positionChartData" style="display:none;">{{ position_percentages | tojson }}</div>
-
+        <!-- Nové prvky pro jednotlivé pozice -->
+        <div id="positionChartLabels" style="display:none;">{{ position_labels | default([]) | tojson }}</div>
+        <div id="positionChartData" style="display:none;">{{ position_percentages | default([]) | tojson }}</div>
     </div>
 
     <!-- Připojení externího JS souboru -->
@@ -154,4 +158,3 @@
         });
     </script>
 {% endblock %}
-
