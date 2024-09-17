@@ -61,7 +61,17 @@ def calculate_portfolio_results(data):
     else:
         avg_monthly_investment = 0
 
-    return tickers_prices, portfolio_value, invested_amount, investment_duration, avg_monthly_investment, stock_info_list
+    # Převod investic podle jednotlivých pozic na procenta pro graf jednotlivých akcií
+    total_invested_positions = sum([info['kupni_hodnota'] for info in stock_info_list])
+    if total_invested_positions > 0:
+        position_percentages = [(info['kupni_hodnota'] / total_invested_positions) * 100 for info in stock_info_list]
+        position_labels = [info['ticker'] for info in stock_info_list]  # Přidáme tickery pro graf
+    else:
+        position_percentages = []
+        position_labels = []
+
+    # Návratové hodnoty včetně přidaných názvů akcií pro graf
+    return tickers_prices, portfolio_value, invested_amount, investment_duration, avg_monthly_investment, stock_info_list, position_percentages, position_labels
 
 # Funkce pro výpočet doby investování (v měsících)
 def calculate_investment_duration(data):
@@ -124,12 +134,10 @@ def select_portfolio(portfolio_id):
         flash('Soubor je prázdný nebo neplatný.', 'error')
         return redirect(url_for('portfolio.upload'))
 
-    tickers_prices, portfolio_value, invested_amount, investment_duration, avg_monthly_investment, stock_info_list = calculate_portfolio_results(data)
+    tickers_prices, portfolio_value, invested_amount, investment_duration, avg_monthly_investment, stock_info_list, position_percentages, position_labels = calculate_portfolio_results(data)
 
     stock_labels = ['Technology', 'Healthcare', 'Finance']
     stock_percentages = [40, 30, 30]
-    position_labels = ['TSLA', 'AAPL', 'AMZN']
-    position_percentages = [50, 25, 25]
 
     results = {
         'portfolio_value': f"{round(portfolio_value, 2)} €",
@@ -147,8 +155,8 @@ def select_portfolio(portfolio_id):
                            results=results,
                            stock_labels=stock_labels,
                            stock_percentages=stock_percentages,
-                           position_labels=position_labels,
-                           position_percentages=position_percentages,
+                           position_labels=position_labels,  # Předání názvů akcií pro graf
+                           position_percentages=position_percentages,  # Předání procent pro graf
                            stock_info_list=stock_info_list,
                            investment_duration=investment_duration,
                            avg_monthly_investment=round(avg_monthly_investment, 2))
