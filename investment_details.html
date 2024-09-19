@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+
+{% block title %}Historie ziskovosti{% endblock %}
+
+{% block content %}
+    <div class="container mt-5">
+        <h2 class="text-center mb-4">Historie ziskovosti</h2>
+
+        <!-- Zobrazení investované částky, doby investování a průměrné měsíční investice -->
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card p-4 mb-4">
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between">
+                            <strong>Investovaná částka:</strong> 
+                            <span>{{ invested_amount }} €</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <strong>Délka investování:</strong> 
+                            <span>{{ investment_duration }} měsíců</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <strong>Průměrná měsíční investice:</strong> 
+                            <span>{{ avg_monthly_investment }} €</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Zobrazení měsíčních zisků a ztrát pro každý rok -->
+        <div class="row justify-content-center mt-5">
+            <div class="col-md-12">
+                <table class="table table-bordered table-striped">
+                    <thead class="thead-dark">
+                        <tr>
+                            <th>Rok</th>
+                            <th>Leden</th>
+                            <th>Únor</th>
+                            <th>Březen</th>
+                            <th>Duben</th>
+                            <th>Květen</th>
+                            <th>Červen</th>
+                            <th>Červenec</th>
+                            <th>Srpen</th>
+                            <th>Září</th>
+                            <th>Říjen</th>
+                            <th>Listopad</th>
+                            <th>Prosinec</th>
+                            <th>Celkem</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for year, months in investment_history.items() %}
+                        <tr>
+                            <td>{{ year }}</td>
+                            <td>{{ months['January']['cash_change']|default("-") }} € ({{ months['January']['percentage_change']|default("-") }} %)</td>
+                            <td>{{ months['February']['cash_change']|default("-") }} € ({{ months['February']['percentage_change']|default("-") }} %)</td>
+                            <td>{{ months['March']['cash_change']|default("-") }} € ({{ months['March']['percentage_change']|default("-") }} %)</td>
+                            <td>{{ months['April']['cash_change']|default("-") }} € ({{ months['April']['percentage_change']|default("-") }} %)</td>
+                            <td>{{ months['May']['cash_change']|default("-") }} € ({{ months['May']['percentage_change']|default("-") }} %)</td>
+                            <td>{{ months['June']['cash_change']|default("-") }} € ({{ months['June']['percentage_change']|default("-") }} %)</td>
+                            <td>{{ months['July']['cash_change']|default("-") }} € ({{ months['July']['percentage_change']|default("-") }} %)</td>
+                            <td>{{ months['August']['cash_change']|default("-") }} € ({{ months['August']['percentage_change']|default("-") }} %)</td>
+                            <td>{{ months['September']['cash_change']|default("-") }} € ({{ months['September']['percentage_change']|default("-") }} %)</td>
+                            <td>{{ months['October']['cash_change']|default("-") }} € ({{ months['October']['percentage_change']|default("-") }} %)</td>
+                            <td>{{ months['November']['cash_change']|default("-") }} € ({{ months['November']['percentage_change']|default("-") }} %)</td>
+                            <td>{{ months['December']['cash_change']|default("-") }} € ({{ months['December']['percentage_change']|default("-") }} %)</td>
+                            <td>{{ yearly_totals[year]['cash_change'] }} € ({{ yearly_totals[year]['percentage_change'] }} %)</td>  <!-- Celkový zisk/ztráta za rok -->
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
