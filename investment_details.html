@@ -54,18 +54,18 @@
                         {% for year, months in investment_history.items() %}
                         <tr>
                             <td>{{ year }}</td>
-                            <td>{{ months['January']['cash_change']|default("-") }} € ({{ months['January']['percentage_change']|default("-") }} %)</td>
-                            <td>{{ months['February']['cash_change']|default("-") }} € ({{ months['February']['percentage_change']|default("-") }} %)</td>
-                            <td>{{ months['March']['cash_change']|default("-") }} € ({{ months['March']['percentage_change']|default("-") }} %)</td>
-                            <td>{{ months['April']['cash_change']|default("-") }} € ({{ months['April']['percentage_change']|default("-") }} %)</td>
-                            <td>{{ months['May']['cash_change']|default("-") }} € ({{ months['May']['percentage_change']|default("-") }} %)</td>
-                            <td>{{ months['June']['cash_change']|default("-") }} € ({{ months['June']['percentage_change']|default("-") }} %)</td>
-                            <td>{{ months['July']['cash_change']|default("-") }} € ({{ months['July']['percentage_change']|default("-") }} %)</td>
-                            <td>{{ months['August']['cash_change']|default("-") }} € ({{ months['August']['percentage_change']|default("-") }} %)</td>
-                            <td>{{ months['September']['cash_change']|default("-") }} € ({{ months['September']['percentage_change']|default("-") }} %)</td>
-                            <td>{{ months['October']['cash_change']|default("-") }} € ({{ months['October']['percentage_change']|default("-") }} %)</td>
-                            <td>{{ months['November']['cash_change']|default("-") }} € ({{ months['November']['percentage_change']|default("-") }} %)</td>
-                            <td>{{ months['December']['cash_change']|default("-") }} € ({{ months['December']['percentage_change']|default("-") }} %)</td>
+                            <td>{{ months.get('January', {}).get('cash_change', '-') }} € ({{ months.get('January', {}).get('percentage_change', '-') }} %)</td>
+                            <td>{{ months.get('February', {}).get('cash_change', '-') }} € ({{ months.get('February', {}).get('percentage_change', '-') }} %)</td>
+                            <td>{{ months.get('March', {}).get('cash_change', '-') }} € ({{ months.get('March', {}).get('percentage_change', '-') }} %)</td>
+                            <td>{{ months.get('April', {}).get('cash_change', '-') }} € ({{ months.get('April', {}).get('percentage_change', '-') }} %)</td>
+                            <td>{{ months.get('May', {}).get('cash_change', '-') }} € ({{ months.get('May', {}).get('percentage_change', '-') }} %)</td>
+                            <td>{{ months.get('June', {}).get('cash_change', '-') }} € ({{ months.get('June', {}).get('percentage_change', '-') }} %)</td>
+                            <td>{{ months.get('July', {}).get('cash_change', '-') }} € ({{ months.get('July', {}).get('percentage_change', '-') }} %)</td>
+                            <td>{{ months.get('August', {}).get('cash_change', '-') }} € ({{ months.get('August', {}).get('percentage_change', '-') }} %)</td>
+                            <td>{{ months.get('September', {}).get('cash_change', '-') }} € ({{ months.get('September', {}).get('percentage_change', '-') }} %)</td>
+                            <td>{{ months.get('October', {}).get('cash_change', '-') }} € ({{ months.get('October', {}).get('percentage_change', '-') }} %)</td>
+                            <td>{{ months.get('November', {}).get('cash_change', '-') }} € ({{ months.get('November', {}).get('percentage_change', '-') }} %)</td>
+                            <td>{{ months.get('December', {}).get('cash_change', '-') }} € ({{ months.get('December', {}).get('percentage_change', '-') }} %)</td>
                             <td>{{ yearly_totals[year]['cash_change'] }} € ({{ yearly_totals[year]['percentage_change'] }} %)</td>  <!-- Celkový zisk/ztráta za rok -->
                         </tr>
                         {% endfor %}
@@ -75,4 +75,3 @@
         </div>
     </div>
 {% endblock %}
-
