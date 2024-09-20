@@ -62,20 +62,37 @@ def get_ticker_from_isin(isin):
     return None
 
 # Funkce pro získání zpožděné ceny z Polygon.io pomocí RESTClient
-def get_delayed_price_polygon(ticker):
+def get_delayed_price_polygon(ticker, date=None):
     if not ticker:
         return None
-    try:
-        # Získáme agregovaná data (OHLCV), kde close představuje nejaktuálnější cenu
+    
+    # Rozhodneme se, zda získat cenu pro konkrétní den nebo poslední dostupnou cenu
+    if date:
+        url = f"https://api.polygon.io/v1/open-close/{ticker}/{date}?adjusted=true&apiKey={POLYGON_API_KEY}"
+    else:
         url = f"https://api.polygon.io/v2/aggs/ticker/{ticker}/prev?adjusted=true&apiKey={POLYGON_API_KEY}"
+    
+    print(f"Fetching data for {ticker} on {date}: {url}")
+
+    try:
         response = requests.get(url)
-        
         if response.status_code == 200:
-            results = response.json().get('results', [])
-            if len(results) > 0:
-                return results[0].get('c', None)  # 'c' je uzavírací cena pro poslední den
+            if date:
+                # Pro konkrétní den získáváme zavírací cenu
+                result = response.json().get('close')
+            else:
+                # Získáváme poslední dostupnou cenu
+                results = response.json().get('results', [])
+                result = results[0].get('c') if results else None
+
+            if result:
+                print(f"Cena pro {ticker} k datu {date}: {result}")
+                return result
+            else:
+                print(f"Žádná data pro {ticker} k datu {date}")
+                return None
         else:
-            print(f"Chyba při získávání zpožděných dat pro {ticker}: {response.status_code}")
+            print(f"Chyba při získávání dat pro {ticker}: {response.status_code}")
             return None
     except Exception as e:
         print(f"Chyba při získávání dat pro {ticker}: {str(e)}")
@@ -291,6 +308,6 @@ def calculate_fees(data):
         return total_fees
     else:
         return 0
-
+    
 
 
