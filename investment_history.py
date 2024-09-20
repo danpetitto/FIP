@@ -90,7 +90,6 @@ def calculate_investment_history(data):
                             'percentage_change': 0
                         }
 
-                    # Zaokrouhlíme na 2 desetinná místa a naformátujeme
                     monthly_summaries[current_date.year][current_date.strftime('%B')]['cash_change'] += round(monthly_performance, 2)
                     monthly_summaries[current_date.year][current_date.strftime('%B')]['percentage_change'] += round(percentage_performance, 2)
 
@@ -100,25 +99,16 @@ def calculate_investment_history(data):
             # Posuneme se o měsíc dále
             current_date += relativedelta(months=1)
 
-    # Výpočet součtu za každý rok a formátování výsledků
+    # Výpočet součtu za každý rok
     yearly_totals = {
         year: {
-            'cash_change': "{:.2f} €".format(round(sum(months['cash_change'] for months in year_data.values()), 2)),
-            'percentage_change': "{:.2f} %".format(round(sum(months['percentage_change'] for months in year_data.values()) / len(year_data), 2))
+            'cash_change': sum(months['cash_change'] for months in year_data.values()),
+            'percentage_change': round(sum(months['percentage_change'] for months in year_data.values()) / len(year_data), 2)
         }
         for year, year_data in monthly_summaries.items()
     }
 
-    # Formátujeme výstupy pro měsíce
-    formatted_monthly_summaries = {
-        year: {
-            month: "{:.2f} € ({:.2f} %)".format(month_data['cash_change'], month_data['percentage_change'])
-            for month, month_data in months.items()
-        }
-        for year, months in monthly_summaries.items()
-    }
-
-    return formatted_monthly_summaries, yearly_totals
+    return monthly_summaries, yearly_totals
 
 def get_price_for_month(ticker, date):
     """Získání ceny ke konci měsíce, pokusí se vrátit cenu z předchozího obchodního dne, pokud je 404."""
@@ -134,4 +124,5 @@ def get_price_for_month(ticker, date):
                 break
             attempts -= 1
     return price
+
 
