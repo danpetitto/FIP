@@ -13,6 +13,7 @@ import pandas as pd
 from io import BytesIO
 from datetime import datetime
 from dateutil import parser
+from investment_history import calculate_investment_history  # Importuje funkce z investment_history.py
 
 portfolio_bp = Blueprint('portfolio', __name__)
 
@@ -73,19 +74,67 @@ def calculate_portfolio_results(data):
     # Návratové hodnoty včetně přidaných názvů akcií pro graf
     return tickers_prices, portfolio_value, invested_amount, investment_duration, avg_monthly_investment, stock_info_list, position_percentages, position_labels
 
-# Funkce pro výpočet doby investování (v měsících)
+# Funkce pro výpočet doby investování (v měsících) na základě prvního záznamu investice
 def calculate_investment_duration(data):
-    oldest_date_str = data['Datum'].min()
-    try:
-        oldest_date = parser.parse(oldest_date_str)
-    except Exception as e:
-        print(f"Chyba při parsování data: {e}")
-        return 0
+    # Převod sloupce Datum na datetime, pokud ještě nebyl převeden
+    data['Datum'] = pd.to_datetime(data['Datum'], dayfirst=True, errors='coerce')
 
+    # Validace dat
+    if data['Datum'].isnull().any():
+        raise ValueError("Některá data ve sloupci 'Datum' nejsou validní.")
+
+    # Najdeme nejstarší datum v datech - začátek investice
+    oldest_date = data['Datum'].min()
+
+    # Získáme aktuální datum
     current_date = datetime.now()
+
+    # Výpočet délky investice v měsících
+    # Pokud je aktuální den větší nebo roven dni nejstarší transakce, přidáme plný měsíc navíc
     duration_in_months = (current_date.year - oldest_date.year) * 12 + current_date.month - oldest_date.month
+    if current_date.day >= oldest_date.day:
+        duration_in_months += 1  # Přičteme 1, pokud je aktuální den větší nebo stejný jako den investice
 
     return duration_in_months
+
+# Příklad použití s testovacími daty
+data = pd.DataFrame({
+    'Datum': ['2022-09-15', '2022-10-10', '2023-08-25', '2024-07-05']  # Testovací data
+})
+
+# Volání funkce pro výpočet délky investování
+duration = calculate_investment_duration(data)
+print(f"Délka investování: {duration} měsíců")
+
+def get_price_for_month(ticker, date):
+    """Získání ceny ke konci měsíce, pokusí se vrátit cenu z předchozího obchodního dne, pokud je 404."""
+    price = get_delayed_price_polygon(ticker, date.strftime('%Y-%m-%d'))
+
+    if price is None:
+        # Pokud se zobrazí chyba 404, zkusíme předchozí den
+        attempts = 5  # Zkusíme získat cenu z 5 předchozích dní
+        while attempts > 0:
+            date -= timedelta(days=1)
+            price = get_delayed_price_polygon(ticker, date.strftime('%Y-%m-%d'))
+            if price is not None:
+                break
+            attempts -= 1
+    return price
+
+def get_price_for_month(ticker, date):
+    """Získání ceny ke konci měsíce, pokusí se vrátit cenu z předchozího obchodního dne, pokud je 404."""
+    price = get_delayed_price_polygon(ticker, date.strftime('%Y-%m-%d'))
+
+    if price is None:
+        # Pokud se zobrazí chyba 404, zkusíme předchozí den
+        attempts = 5  # Zkusíme získat cenu z 5 předchozích dní
+        while attempts > 0:
+            date -= timedelta(days=1)
+            price = get_delayed_price_polygon(ticker, date.strftime('%Y-%m-%d'))
+            if price is not None:
+                break
+            attempts -= 1
+    return price
 
 # Route pro nahrávání nového portfolia
 @portfolio_bp.route('/upload', methods=['GET', 'POST'])
@@ -118,6 +167,7 @@ def upload():
     user_portfolios = Portfolio.query.filter_by(user_id=current_user.id).all()
     return render_template('upload.html', portfolios=user_portfolios)
 
+# Route pro výběr portfolia
 @portfolio_bp.route('/select_portfolio/<int:portfolio_id>', methods=['GET'])
 @login_required
 def select_portfolio(portfolio_id):
@@ -165,18 +215,29 @@ def select_portfolio(portfolio_id):
 @portfolio_bp.route('/investment_details', methods=['GET'])
 @login_required
 def investment_details():
-    invested_amount = session.get('invested_amount', 0)
-    investment_duration = session.get('investment_duration', 0)
+    # Získání investované částky a doby investování ze session nebo vypočítané hodnoty
+    invested_amount = session.get('invested_amount', 1519.96)  # Příkladová hodnota
+    investment_duration = session.get('investment_duration', 19)  # Příkladová hodnota
 
     if investment_duration > 0:
         avg_monthly_investment = invested_amount / investment_duration
     else:
         avg_monthly_investment = 0
 
+    # Získáme portfolia a jejich data
+    portfolio = Portfolio.query.filter_by(user_id=current_user.id).first()
+    csv_data = BytesIO(portfolio.data)
+    data = pd.read_csv(csv_data, encoding='utf-8')
+
+    # Použijeme funkci pro výpočet historie investic
+    investment_history, yearly_totals = calculate_investment_history(data)
+
     return render_template('investment_details.html', 
-                           invested_amount=invested_amount,
+                           invested_amount=round(invested_amount, 2),
                            investment_duration=investment_duration,
-                           avg_monthly_investment=round(avg_monthly_investment, 2))
+                           avg_monthly_investment=round(avg_monthly_investment, 2),
+                           investment_history=investment_history,
+                           yearly_totals=yearly_totals)
 
 # Route pro smazání portfolia
 @portfolio_bp.route('/delete_portfolio/<int:portfolio_id>', methods=['POST'])
