@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+
+{% block title %}Nahrát portfolio{% endblock %}
+
+{% block content %}
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <h2 class="text-center">Nahrát nové portfolio</h2>
+            <form method="POST" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="portfolio_name">Název portfolia</label>
+                    <input type="text" class="form-control" id="portfolio_name" name="portfolio_name" required>
+                </div>
+                <div class="form-group">
+                    <label for="file">Vyberte CSV soubor</label>
+                    <input type="file" class="form-control-file" id="file" name="file" accept=".csv" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">Nahrát</button>
+            </form>
+
+            <h2 class="mt-5 text-center">Vaše portfolia</h2>
+            <ul class="list-group">
+                {% for portfolio in portfolios %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <a href="{{ url_for('portfolio.select_portfolio', portfolio_id=portfolio.id) }}" class="btn btn-info btn-sm">Zobrazit výsledky</a>
+                            <span>{{ portfolio.name }}</span>
+                        </div>
+                        <form action="{{ url_for('portfolio.delete_portfolio', portfolio_id=portfolio.id) }}" method="POST" class="float-right">
+                            <button type="submit" class="btn btn-danger btn-sm">Smazat</button>
+                        </form>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+{% endblock %}
