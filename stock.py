@@ -63,44 +63,90 @@ def search_stocks():
         logging.error(f'Něco se pokazilo: {err}')
         return jsonify({'error': f'Něco se pokazilo: {err}'}), 500
 
-# Funkce pro získání dat z Yahoo Finance API
-def get_yahoo_finance_data(ticker):
-    yahoo_url = f"https://query1.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=summaryDetail,financialData"
+# URL pro získání zpožděné ceny z Polygon API
+API_DELAYED_PRICE_URL = 'https://api.polygon.io/v2/aggs/ticker/{ticker}/prev'
+
+# Funkce pro získání zpožděné ceny akcie z Polygon API
+def get_polygon_delayed_price(ticker):
+    url = API_DELAYED_PRICE_URL.format(ticker=ticker)
+    params = {'apiKey': POLYGON_API_KEY}
+    
     try:
-        yahoo_response = requests.get(yahoo_url)
-        yahoo_response.raise_for_status()
-        yahoo_data = yahoo_response.json()
-        
-        # Logování celé odpovědi pro kontrolu struktury
-        logging.debug(f'Odpověď z Yahoo Finance pro {ticker}: {yahoo_data}')
-        
-        if "quoteSummary" in yahoo_data and "result" in yahoo_data["quoteSummary"]:
-            result = yahoo_data["quoteSummary"]["result"][0]
-            
-            # Ověření, zda je správně načtena aktuální cena
-            current_price = result['financialData'].get('currentPrice', {}).get('raw', 'Data nejsou dostupná')
-            market_cap = result['summaryDetail'].get('marketCap', {}).get('raw', 'Data nejsou dostupná')
-            dividend_yield = result['summaryDetail'].get('dividendYield', {}).get('raw', 'Data nejsou dostupná')
+        # Volání Polygon API
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        price_data = response.json()
 
-            stock_data_combined = {
-                'name': ticker.upper(),
-                'market_cap': market_cap,
-                'current_price': current_price,
-                'dividend_yield': dividend_yield
-            }
-
-            logging.debug(f"Aktuální cena pro {ticker}: {current_price}")
-            return stock_data_combined
+        # Ověření, zda máme správná data
+        if 'results' in price_data and len(price_data['results']) > 0:
+            result = price_data['results'][0]
+            # Získání uzavírací ceny (close price) z výsledku
+            delayed_price = result.get('c', 'Data nejsou dostupná')
+            logging.debug(f"Zpožděná cena pro {ticker}: {delayed_price}")
+            return delayed_price
         else:
-            logging.debug(f"Yahoo Finance neposkytuje data pro {ticker}")
-            return None
+            logging.debug(f"Polygon API neposkytuje data pro {ticker}.")
+            return 'Data nejsou dostupná'
 
     except requests.exceptions.HTTPError as err:
-        logging.error(f'HTTP chyba z Yahoo Finance: {err}')
-        return None
+        logging.error(f"HTTP chyba z Polygon API: {err}")
+        return 'Data nejsou dostupná'
     except Exception as err:
-        logging.error(f'Něco se pokazilo při volání Yahoo Finance API: {err}')
-        return None
+        logging.error(f"Něco se pokazilo při volání Polygon API: {err}")
+        return 'Data nejsou dostupná'
+    
+
+  # URL pro získání dividend z Polygon API - správný endpoint
+API_DIVIDEND_URL = 'https://api.polygon.io/v3/reference/dividends?ticker={ticker}'
+
+# Funkce pro získání dividend z Polygon API
+def get_polygon_dividend_data(ticker):
+    url = API_DIVIDEND_URL.format(ticker=ticker)
+    params = {'apiKey': POLYGON_API_KEY}
+    
+    try:
+        # Volání Polygon API pro získání dat o dividendách
+        response = requests.get(url, params=params)
+
+        # Zpracování odpovědi, pokud nejsou žádné chyby
+        response.raise_for_status()
+        dividend_data = response.json()
+
+        if 'results' in dividend_data and len(dividend_data['results']) > 0:
+            result = dividend_data['results'][0]
+            
+            # Získání čtvrtletní dividendy na akcii (cash_amount)
+            dividend_per_share = result.get('cash_amount', 'Data nejsou dostupná')
+            
+            # Získání aktuální ceny akcie pro výpočet
+            current_price = get_polygon_delayed_price(ticker)
+
+            # Výpočet čtvrtletního výnosu (%)
+            if current_price != 'Data nejsou dostupná' and dividend_per_share != 'Data nejsou dostupná':
+                quarterly_yield = (float(dividend_per_share) / float(current_price)) * 100
+                quarterly_yield = round(quarterly_yield, 2)  # Zaokrouhlení na 2 desetinná místa
+            else:
+                quarterly_yield = 'Data nejsou dostupná'
+
+            return {
+                'quarterly_dividend_per_share': f'{dividend_per_share} USD',  # Zobrazení čtvrtletní dividendy
+                'quarterly_yield': f'{quarterly_yield} %' if quarterly_yield != 'Data nejsou dostupná' else 'Data nejsou dostupná',
+                'dividend_yield': f'{(quarterly_yield * 4):.2f} %' if quarterly_yield != 'Data nejsou dostupná' else 'Data nejsou dostupná'  # Roční dividendový výnos (pokud nejsou dostupná data z API)
+            }
+        else:
+            return {
+                'quarterly_dividend_per_share': 'Data nejsou dostupná',
+                'quarterly_yield': 'Data nejsou dostupná',
+                'dividend_yield': 'Data nejsou dostupná'
+            }
+
+    except Exception as err:
+        logging.error(f"Chyba při získávání dividend z Polygon API: {err}")
+        return {
+            'quarterly_dividend_per_share': 'Data nejsou dostupná',
+            'quarterly_yield': 'Data nejsou dostupná',
+            'dividend_yield': 'Data nejsou dostupná'
+        }
 
 # Trasa pro zobrazení detailů akcie
 @stock_bp.route('/stocks/<ticker>', methods=['GET'])
@@ -114,24 +160,30 @@ def get_stock(ticker):
         response.raise_for_status()
         stock_data = response.json()
 
-        # Uložíme pouze relevantní data: Tržní kapitalizace, aktuální cena a dividendový výnos
+        # Získání dividendových dat
+        dividend_data = get_polygon_dividend_data(ticker)
+
+        # Získání zpožděné ceny
+        delayed_price = get_polygon_delayed_price(ticker)
+
+        # Kontrola a extrakce dat z API odpovědi
+        stock_name = stock_data['results'].get('name', 'Název není dostupný')
+        market_cap = stock_data['results'].get('market_cap', 'Data nejsou dostupná')
+
+        # Pokud data nejsou dostupná, záznam o tom
+        if market_cap == 'Data nejsou dostupná':
+            logging.debug(f"Tržní kapitalizace pro {ticker} není dostupná.")
+
+        # Kombinování všech získaných dat
         stock_data_combined = {
-            'name': stock_data['results'].get('name', 'Název není dostupný'),
-            'market_cap': stock_data['results'].get('market_cap', 'Data nejsou dostupná'),
-            # Ověření, že aktuální cena je ve správném formátu
-            'current_price': stock_data['results'].get('current_price', 'Data nejsou dostupná'),
-            # Ověření, že dividendový výnos je ve správném formátu
-            'dividend_yield': stock_data['results'].get('dividend_yield', 'Data nejsou dostupná')
+            'name': stock_name,
+            'market_cap': market_cap,
+            'current_price': delayed_price,
+            'dividend_yield': dividend_data.get('dividend_yield', 'Data nejsou dostupná'),
+            'dividend_per_share': dividend_data.get('dividend_per_share', 'Data nejsou dostupná')
         }
 
-        # Pokud jsou všechna data "N/A", zkusíme Yahoo Finance
-        if all(value == 'Data nejsou dostupná' for value in stock_data_combined.values()):
-            logging.debug(f"Polygon API neposkytuje data, přecházím na Yahoo Finance pro {ticker}")
-            stock_data_combined = get_yahoo_finance_data(ticker)
-
-            if stock_data_combined is None:
-                return render_template('stocks.html', error="Data nejsou dostupná ani z Yahoo Finance.", ticker=ticker)
-        
+        # Renderování šablony s daty
         return render_template('stocks.html', stock=stock_data_combined, ticker=ticker)
 
     except requests.exceptions.HTTPError as err:
