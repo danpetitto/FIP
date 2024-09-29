@@ -165,8 +165,64 @@ def add_transaction(portfolio_id):
     flash(f'Transakce {shares} akcií {ticker} byla úspěšně přidána.', 'success')
     return redirect(url_for('portfolio.select_portfolio', portfolio_id=portfolio_id))
 
-#nahrání csv a manáuálních
+# Funkce pro získání informací o akciích podle ISIN nebo manuálních transakcí
+def get_stock_info(isin, pocet_akcii, cena):
+    ticker = get_ticker_from_isin(isin)
+    if not ticker:
+        return {
+            'Symbol': 'Neznámý',
+            'Kupní hodnota': 'Neznámá',
+            'Aktuální hodnota': 'Neznámá',
+            'Počet akcií': 'Neznámé',
+            'Profit': 'Neznámý'
+        }
 
+    current_price = get_delayed_price_polygon(ticker)
+
+    if current_price is None:
+        # Pokud nemáme aktuální cenu, vracíme alespoň kupní hodnotu a počet akcií
+        return {
+            'Symbol': ticker,
+            'Kupní hodnota': round(cena * pocet_akcii, 2),
+            'Aktuální hodnota': 'Neznámá',
+            'Počet akcií': pocet_akcii,
+            'Profit': 'Neznámý'
+        }
+
+    # Výpočet aktuální hodnoty a zisku
+    aktualni_hodnota = current_price * pocet_akcii
+    profit = aktualni_hodnota - (cena * pocet_akcii)
+
+    return {
+        'Symbol': ticker,
+        'Kupní hodnota': round(cena * pocet_akcii, 2),
+        'Aktuální hodnota': round(aktualni_hodnota, 2),
+        'Počet akcií': pocet_akcii,
+        'Profit': round(profit, 2)
+    }
+
+# Funkce pro manuální transakce
+def get_stock_info_from_manual(transaction):
+    ticker = transaction['ticker']
+    shares = transaction['shares']
+    price = transaction['price']
+    current_price = get_delayed_price_polygon(ticker)
+
+    purchase_value = shares * price
+    current_value = shares * current_price if current_price else 0
+    profit = current_value - purchase_value
+
+    return {
+        'Symbol': ticker,
+        'Kupní hodnota': round(purchase_value, 2),
+        'Aktuální hodnota': round(current_value, 2) if current_price else 'Neznámá',
+        'Počet akcií': shares,
+        'Profit': round(profit, 2)
+    }
+
+# Route pro výběr portfolia
+@portfolio_bp.route('/select_portfolio/<int:portfolio_id>', methods=['GET'])
+@login_required
 def select_portfolio(portfolio_id):
     # Načtení dat z portfolia a session
     portfolio = Portfolio.query.get_or_404(portfolio_id)
@@ -215,6 +271,7 @@ def select_portfolio(portfolio_id):
     }
 
     return render_template('process.html', results=results, stock_info_list=stock_info_list, portfolio=portfolio)
+
 # Route pro zobrazení detailů investic
 @portfolio_bp.route('/investment_details', methods=['GET'])
 @login_required
