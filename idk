@@ -13,18 +13,17 @@ from portfolio_analysis import get_delayed_price_polygon, get_sector_from_ticker
 from investment_history import calculate_investment_history  # Ujisti se, že tato funkce existuje
 
 def get_ticker_from_isin(isin):
-    # Zde by mělo dojít k mapování ISIN na ticker
     isin_mapping = {
-        'US0378331005': 'AAPL',  # Apple
-        'US88160R1014': 'TSLA',  # Tesla
-        'US02079K3059': 'GOOGL',  # Google
+        'US0378331005': 'AAPL',
+        'US88160R1014': 'TSLA',
+        'US02079K3059': 'GOOGL',
     }
     return isin_mapping.get(isin, None)
 
 
 portfolio_bp = Blueprint('portfolio', __name__)
 
-# Funkce pro výpočet výsledků portfolia, očekává ISIN pro každou akcii
+# Funkce pro výpočet výsledků portfolia
 def calculate_portfolio_results(data):
     tickers_prices = {
         'ticker': {},
@@ -33,8 +32,6 @@ def calculate_portfolio_results(data):
     }
 
     stock_info_list = []
-
-    # Získání tickerů, cen a odvětví pro každou jedinečnou ISIN
     unique_isins = data['ISIN'].unique()
     for isin in unique_isins:
         ticker = get_ticker_from_isin(isin)
@@ -45,7 +42,6 @@ def calculate_portfolio_results(data):
         tickers_prices['current_price'][isin] = current_price
         tickers_prices['sector'][isin] = sector
 
-        # Výpočet kupní hodnoty, aktuální hodnoty a profitu pro každou akcii
         total_shares = data.loc[data['ISIN'] == isin, 'Počet'].sum()
         purchase_price = data.loc[data['ISIN'] == isin, 'Cena'].mean()
         purchase_value = total_shares * purchase_price
@@ -69,18 +65,17 @@ def calculate_portfolio_results(data):
     else:
         avg_monthly_investment = 0
 
-    # Převod investic podle jednotlivých pozic na procenta pro graf jednotlivých akcií
     total_invested_positions = sum([info['kupni_hodnota'] for info in stock_info_list])
     if total_invested_positions > 0:
         position_percentages = [(info['kupni_hodnota'] / total_invested_positions) * 100 for info in stock_info_list]
-        position_labels = [info['ticker'] for info in stock_info_list]  # Přidáme tickery pro graf
+        position_labels = [info['ticker'] for info in stock_info_list]
     else:
         position_percentages = []
         position_labels = []
 
     return tickers_prices, portfolio_value, invested_amount, investment_duration, avg_monthly_investment, stock_info_list, position_percentages, position_labels
 
-# Funkce pro výpočet doby investování (v měsících) na základě prvního záznamu investice
+# Výpočet doby investování (v měsících)
 def calculate_investment_duration(data):
     data['Datum'] = pd.to_datetime(data['Datum'], dayfirst=True, errors='coerce')
 
@@ -128,11 +123,9 @@ def upload():
     return render_template('upload.html', portfolios=user_portfolios)
 
 # Route pro přidání nové transakce
-
-@app.route('/add_transaction/<int:portfolio_id>', methods=['POST'])
+@portfolio_bp.route('/add_transaction/<int:portfolio_id>', methods=['POST'])
 @login_required
 def add_transaction(portfolio_id):
-    # Získání vstupů z formuláře
     ticker = request.form.get('ticker')
     transaction_type = request.form.get('transaction_type')  # Nákup nebo prodej
     shares = request.form.get('shares')
@@ -141,10 +134,8 @@ def add_transaction(portfolio_id):
     fees = request.form.get('fees')
     currency = request.form.get('currency')
 
-    # Debugging - vypiš přijaté údaje z formuláře
     print(f"Ticker: {ticker}, Typ transakce: {transaction_type}, Počet akcií: {shares}, Cena: {price}, Datum: {date}, Poplatky: {fees}, Měna: {currency}")
 
-    # Validace vstupů
     if not ticker or not shares or not date:
         flash('Musíte zadat Ticker, Počet akcií a Datum.', 'error')
         return redirect(url_for('portfolio.select_portfolio', portfolio_id=portfolio_id))
@@ -157,7 +148,6 @@ def add_transaction(portfolio_id):
         flash('Počet akcií, cena a poplatky musí být čísla.', 'error')
         return redirect(url_for('portfolio.select_portfolio', portfolio_id=portfolio_id))
 
-    # Uložení transakce do session
     manual_transactions = session.get('manual_transactions', [])
     manual_transactions.append({
         'ticker': ticker,
@@ -170,85 +160,16 @@ def add_transaction(portfolio_id):
     })
     session['manual_transactions'] = manual_transactions
 
-    # Debugging - výpis obsahu session po přidání transakce
     print(f"Aktuální obsah session: {session['manual_transactions']}")
 
     flash(f'Transakce {shares} akcií {ticker} byla úspěšně přidána.', 'success')
     return redirect(url_for('portfolio.select_portfolio', portfolio_id=portfolio_id))
 
+#nahrání csv a manáuálních
 
-# Route pro výpočet a zobrazení portfolia
-
-@app.route('/select_portfolio/<int:portfolio_id>', methods=['GET'])
-@login_required
 def select_portfolio(portfolio_id):
     # Načtení dat z portfolia a session
     portfolio = Portfolio.query.get_or_404(portfolio_id)
-    if portfolio.user != current_user:
-        flash('Nemáte oprávnění k zobrazení tohoto portfolia.', 'error')
-        return redirect(url_for('portfolio.upload'))
-
-    # Načítání manuálních transakcí ze session
-    manual_transactions = session.get('manual_transactions', [])
-
-    # Výpočet hodnoty portfolia s manuálními transakcemi
-    total_portfolio_value = calculate_portfolio_value(manual_transactions)
-    
-    return render_template('portfolio_detail.html', total_portfolio_value=total_portfolio_value, portfolio=portfolio)
-
-
-def calculate_portfolio_value(manual_transactions):
-    # Výpočet hodnoty na základě manuálních transakcí
-    total_value = 0
-    for transaction in manual_transactions:
-        ticker = transaction['ticker']
-        shares = transaction['shares']
-        price = transaction['price']
-        transaction_value = shares * price
-        total_value += transaction_value
-        print(f"Zpracovávám transakci: {ticker}, Akcie: {shares}, Cena: {price}, Celková hodnota: {transaction_value} €")
-    
-    print(f"Celková hodnota portfolia po přidání manuálních transakcí: {total_value} €")
-    return total_value
-
-# Route pro výpočet a zobrazení portfolia
-@portfolio_bp.route('/select_portfolio/<int:portfolio_id>', methods=['GET'])
-@login_required
-def select_portfolio(portfolio_id):
-    portfolio = Portfolio.query.get_or_404(portfolio_id)
-    if portfolio.user != current_user:
-        flash('Nemáte oprávnění k zobrazení tohoto portfolia.', 'error')
-        return redirect(url_for('portfolio.upload'))
-
-    # Načítání manuálních transakcí ze session
-    manual_transactions = session.get('manual_transactions', [])
-
-    # Výpočet hodnoty portfolia s manuálními transakcemi
-    total_portfolio_value = calculate_portfolio_value(manual_transactions)
-
-    return render_template('portfolio_detail.html', total_portfolio_value=total_portfolio_value, portfolio=portfolio)
-
-
-def calculate_portfolio_value(manual_transactions):
-    # Výpočet hodnoty na základě manuálních transakcí
-    total_value = 0
-    for transaction in manual_transactions:
-        ticker = transaction['ticker']
-        shares = transaction['shares']
-        price = transaction['price']
-        transaction_value = shares * price
-        total_value += transaction_value
-        print(f"Zpracovávám transakci: {ticker}, Akcie: {shares}, Cena: {price}, Celková hodnota: {transaction_value} €")
-    
-    print(f"Celková hodnota portfolia po přidání manuálních transakcí: {total_value} €")
-    return total_value
-
-# Route pro zobrazení portfolia
-@portfolio_bp.route('/select_portfolio/<int:portfolio_id>', methods=['GET'])
-@login_required
-def select_portfolio(portfolio_id):
-    portfolio = Portfolio.query.get_or_404(portfolio_id)
-
     if portfolio.user != current_user:
         flash('Nemáte oprávnění k zobrazení tohoto portfolia.', 'error')
         return redirect(url_for('portfolio.upload'))
@@ -261,38 +182,39 @@ def select_portfolio(portfolio_id):
         flash('Soubor je prázdný nebo neplatný.', 'error')
         return redirect(url_for('portfolio.upload'))
 
-    # Získání manuálních transakcí ze session
+    # Načítání manuálních transakcí ze session
     manual_transactions = session.get('manual_transactions', [])
 
-    # Výpočet hodnoty portfolia včetně manuálních transakcí
-    total_portfolio_value = calculate_portfolio_value(data, manual_transactions)
+    # Získání informací o akciích z CSV a manuálních transakcí
+    stock_info_list = []
 
-    # Výpočet dalších údajů
-    tickers_prices, portfolio_value, invested_amount, investment_duration, avg_monthly_investment, stock_info_list, position_percentages, position_labels = calculate_portfolio_results(data)
+    # Získání informací z CSV
+    for _, row in data.iterrows():
+        stock_info = get_stock_info(row['ISIN'], row['Počet'], row['Cena'])
+        stock_info_list.append(stock_info)
 
+    # Přidání manuálních transakcí do stock_info_list
+    for transaction in manual_transactions:
+        stock_info = get_stock_info_from_manual(transaction)
+        stock_info_list.append(stock_info)
+
+    # Výpočet dalších statistik, jako hodnota portfolia, zisky apod.
+    total_portfolio_value, total_invested_amount = calculate_portfolio_value(data, manual_transactions)
+
+    # Získání dividend a dalších informací
+    total_dividend_results = calculate_dividend_cash(data, total_portfolio_value)
+
+    # Vytvoření výsledků pro šablonu
     results = {
-        'portfolio_value': f"{round(portfolio_value, 2)} €",
+        'portfolio_value': f"{round(total_portfolio_value, 2)} €",
         'realized_profit': f"{round(calculate_realized_profit(data), 2)} €",
-        'unrealized_profit': f"{round(calculate_unrealized_profit(portfolio_value, invested_amount), 2)} €",
-        'total_dividends': f"{round(calculate_dividend_cash(data)['total_dividends'], 2)} €",
+        'unrealized_profit': f"{round(calculate_unrealized_profit(total_portfolio_value, total_invested_amount), 2)} €",
+        'total_dividends': f"{round(total_dividend_results['total_dividends'], 2)} €",
         'total_fees': f"{round(calculate_fees(data), 2)} €",
-        'invested': f"{round(invested_amount, 2)} €"
+        'invested': f"{round(total_invested_amount, 2)} €"
     }
 
-    # Uložení dat do session
-    session['invested_amount'] = invested_amount
-    session['investment_duration'] = investment_duration
-
-    return render_template('process.html',
-                           results=results,
-                           total_portfolio_value=total_portfolio_value,
-                           position_labels=position_labels,
-                           position_percentages=position_percentages,
-                           stock_info_list=stock_info_list,
-                           investment_duration=investment_duration,
-                           avg_monthly_investment=round(avg_monthly_investment, 2),
-                           portfolio=portfolio)
-
+    return render_template('process.html', results=results, stock_info_list=stock_info_list, portfolio=portfolio)
 # Route pro zobrazení detailů investic
 @portfolio_bp.route('/investment_details', methods=['GET'])
 @login_required
@@ -335,5 +257,3 @@ def delete_portfolio(portfolio_id):
     db.session.commit()
     flash('Portfolio bylo úspěšně smazáno.', 'success')
     return redirect(url_for('portfolio.upload'))
-
-
