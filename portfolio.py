@@ -14,6 +14,7 @@ from io import BytesIO
 from datetime import datetime
 from dateutil import parser
 from investment_history import calculate_investment_history  # Importuje funkce z investment_history.py
+from datetime import timedelta
 
 portfolio_bp = Blueprint('portfolio', __name__)
 
@@ -184,29 +185,23 @@ def select_portfolio(portfolio_id):
         flash('Soubor je prázdný nebo neplatný.', 'error')
         return redirect(url_for('portfolio.upload'))
 
+    # Předání objektu portfolio do šablony process.html
     tickers_prices, portfolio_value, invested_amount, investment_duration, avg_monthly_investment, stock_info_list, position_percentages, position_labels = calculate_portfolio_results(data)
 
-    stock_labels = ['Technology', 'Healthcare', 'Finance']
-    stock_percentages = [40, 30, 30]
-
-    results = {
-        'portfolio_value': f"{round(portfolio_value, 2)} €",
-        'realized_profit': f"{round(calculate_realized_profit(data), 2)} €",
-        'unrealized_profit': f"{round(calculate_unrealized_profit(portfolio_value, invested_amount), 2)} €",
-        'total_dividends': f"{round(calculate_dividend_cash(data)['total_dividends'], 2)} €",
-        'total_fees': f"{round(calculate_fees(data), 2)} €",
-        'invested': f"{round(invested_amount, 2)} €"
-    }
-
-    session['invested_amount'] = invested_amount
-    session['investment_duration'] = investment_duration
-
     return render_template('process.html',
-                           results=results,
-                           stock_labels=stock_labels,
-                           stock_percentages=stock_percentages,
-                           position_labels=position_labels,  # Předání názvů akcií pro graf
-                           position_percentages=position_percentages,  # Předání procent pro graf
+                           results={
+                               'portfolio_value': f"{round(portfolio_value, 2)} €",
+                               'realized_profit': f"{round(calculate_realized_profit(data), 2)} €",
+                               'unrealized_profit': f"{round(calculate_unrealized_profit(portfolio_value, invested_amount), 2)} €",
+                               'total_dividends': f"{round(calculate_dividend_cash(data)['total_dividends'], 2)} €",
+                               'total_fees': f"{round(calculate_fees(data), 2)} €",
+                               'invested': f"{round(invested_amount, 2)} €"
+                           },
+                           portfolio=portfolio,  # Předání objektu portfolio
+                           stock_labels=['Technology', 'Healthcare', 'Finance'],
+                           stock_percentages=[40, 30, 30],
+                           position_labels=position_labels,
+                           position_percentages=position_percentages,
                            stock_info_list=stock_info_list,
                            investment_duration=investment_duration,
                            avg_monthly_investment=round(avg_monthly_investment, 2))
@@ -239,6 +234,127 @@ def investment_details():
                            investment_history=investment_history,
                            yearly_totals=yearly_totals)
 
+from flask import session, request, redirect, flash, url_for, render_template
+from flask_login import login_required, current_user
+from models import db, Portfolio, Trade
+from datetime import datetime
+
+# Přidání nového obchodu do portfolia
+@portfolio_bp.route('/trades/add/<int:portfolio_id>', methods=['POST'])
+@login_required
+def add_trade(portfolio_id):
+    portfolio = Portfolio.query.get_or_404(portfolio_id)
+
+    if portfolio.user != current_user:
+        flash('Nemáte oprávnění k zobrazení tohoto portfolia.', 'error')
+        return redirect(url_for('portfolio.upload'))
+
+    # Načtení dat z formuláře
+    datum = request.form.get('datum')
+    typ_obchodu = request.form.get('typ')
+    ticker = request.form.get('ticker')
+    cena = float(request.form.get('cena', 0))
+    pocet = int(request.form.get('pocet', 1))  # Počet akcií
+    poplatky = float(request.form.get('poplatky', 0))
+
+    # Vypočítáme hodnotu
+    hodnota = cena * pocet
+
+    # Vytvoření nové transakce a uložení do databáze
+    novy_obchod = Trade(
+        portfolio_id=portfolio_id,
+        datum=datetime.strptime(datum, '%Y-%m-%d'),
+        typ_obchodu=typ_obchodu,
+        ticker=ticker,
+        cena=cena,
+        pocet=pocet,  # Uložíme počet
+        hodnota=hodnota,  # Hodnota se počítá jako cena * počet
+        poplatky=poplatky
+    )
+    
+    db.session.add(novy_obchod)
+    db.session.commit()
+
+    flash('Obchod byl úspěšně přidán.', 'success')
+    return redirect(url_for('portfolio.trades', portfolio_id=portfolio_id))
+
+# Zobrazení obchodů pro konkrétní portfolio
+@portfolio_bp.route('/trades/<int:portfolio_id>', methods=['GET'])
+@login_required
+def trades(portfolio_id):
+    # Načteme portfolio z databáze
+    portfolio = Portfolio.query.get_or_404(portfolio_id)
+
+    if portfolio.user != current_user:
+        flash('Nemáte oprávnění k zobrazení tohoto portfolia.', 'error')
+        return redirect(url_for('portfolio.upload'))
+
+    # Načteme obchody z databáze
+    trades_data_from_db = Trade.query.filter_by(portfolio_id=portfolio_id).order_by(Trade.datum.desc()).all()
+
+    # Načtení dat z CSV souboru v portfoliu (pokud existuje)
+    csv_data = BytesIO(portfolio.data)
+    try:
+        data = pd.read_csv(csv_data, encoding='utf-8')
+    except pd.errors.EmptyDataError:
+        flash('Soubor je prázdný nebo neplatný.', 'error')
+        return redirect(url_for('portfolio.upload'))
+
+    if 'ISIN' in data.columns:
+        data['Ticker'] = data['ISIN'].apply(get_ticker_from_isin)
+    else:
+        flash('Soubor neobsahuje sloupec "ISIN".', 'error')
+        return redirect(url_for('portfolio.upload'))
+
+    # Převod CSV na seznam obchodů
+    if 'Počet' in data.columns and 'Cena' in data.columns:
+        data['Typ obchodu'] = data['Počet'].apply(lambda x: 'nákup' if x > 0 else 'prodej')
+        data['Hodnota'] = data['Cena'] * abs(data['Počet'])
+
+        if 'Transaction and/or third' not in data.columns:
+            data['Transaction and/or third'] = 0
+
+        # Přidáme počet do slovníků
+        trades_data_from_csv = data[['Datum', 'Typ obchodu', 'Ticker', 'Cena', 'Počet', 'Hodnota', 'Transaction and/or third']].to_dict(orient='records')
+    else:
+        flash('Soubor neobsahuje potřebné sloupce "Počet" nebo "Cena".', 'error')
+        trades_data_from_csv = []
+
+    # Spojení obchodů z CSV a z databáze
+    trades_data_combined = trades_data_from_csv + [{
+        'Datum': trade.datum.strftime('%Y-%m-%d'),
+        'Typ obchodu': trade.typ_obchodu,
+        'Ticker': trade.ticker,
+        'Cena': trade.cena,
+        'Počet': trade.pocet,
+        'Hodnota': trade.hodnota,
+        'Transaction and/or third': trade.poplatky
+    } for trade in trades_data_from_db]
+
+    # Zobrazení obchodů ve šabloně
+    return render_template('trades.html', trades=trades_data_combined, portfolio_id=portfolio_id)
+
+# Smazání transakce
+@portfolio_bp.route('/trades/delete/<int:trade_id>/<int:portfolio_id>', methods=['POST'])
+@login_required
+def delete_trade(trade_id, portfolio_id):
+    # Najdeme transakci podle ID
+    trade_to_delete = Trade.query.get_or_404(trade_id)
+    
+    # Ověříme, zda uživatel má oprávnění k portfoliu, ke kterému transakce patří
+    portfolio = Portfolio.query.get_or_404(portfolio_id)
+    
+    if portfolio.user != current_user:
+        flash('Nemáte oprávnění smazat tento obchod.', 'error')
+        return redirect(url_for('portfolio.trades', portfolio_id=portfolio_id))
+
+    # Smazání transakce
+    db.session.delete(trade_to_delete)
+    db.session.commit()
+
+    flash('Obchod byl úspěšně smazán.', 'success')
+    return redirect(url_for('portfolio.trades', portfolio_id=portfolio_id))
+
 # Route pro smazání portfolia
 @portfolio_bp.route('/delete_portfolio/<int:portfolio_id>', methods=['POST'])
 @login_required
@@ -253,3 +369,5 @@ def delete_portfolio(portfolio_id):
     db.session.commit()
     flash('Portfolio bylo úspěšně smazáno.', 'success')
     return redirect(url_for('portfolio.upload'))
+
+
