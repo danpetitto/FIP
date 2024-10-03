@@ -37,6 +37,7 @@ def load_user(user_id):
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(portfolio_bp, url_prefix='/portfolio')
 
+
 # Pokud máte stock_bp pro akcie, zaregistrujte jej
 app.register_blueprint(stock_bp, url_prefix='/stock')
 
