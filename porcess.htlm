@@ -13,27 +13,39 @@
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Hodnota portfolia:</strong> 
-                            <span>{{ results.portfolio_value }}</span>
+                            <span>{{ results.portfolio_value }} </span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Realizovaný zisk:</strong> 
-                            <span>{{ results.realized_profit }}</span>
+                            <span>{{ results.realized_profit }} </span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Nerealizovaný zisk:</strong> 
-                            <span>{{ results.unrealized_profit }}</span>
+                            <span>{{ results.unrealized_profit }} </span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Celková výše dividend:</strong> 
-                            <span>{{ results.total_dividends }}</span>
+                            <span>{{ results.total_dividends }} </span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <strong>Dividendový výnos:</strong> 
+                            <span>{{ results.dividend_yield }} </span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <strong>Predikce dividend na 10 let:</strong> 
+                            <span>{{ results.dividend_prediction_10_years }} </span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <strong>Daň z dividend:</strong> 
+                            <span>{{ results.tax_on_dividends }} </span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Poplatky:</strong> 
-                            <span>{{ results.total_fees }}</span>
+                            <span>{{ results.total_fees }} </span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Investovaná částka:</strong> 
-                            <span>{{ results.invested }} €</span>
+                            <span>{{ results.invested }} </span>
                         </li>
                     </ul>
                 </div>
@@ -41,7 +53,15 @@
                 <!-- Odkaz na detaily investic -->
                 <div class="text-center mb-4">
                     <a href="{{ url_for('portfolio.investment_details') }}" class="btn btn-primary">Zobrazit detaily investic</a>
-                </div>                
+                </div>    
+                <!-- Odkaz na dividendový kalendář -->
+                <div class="text-center mb-4">
+                     <a href="{{ url_for('portfolio.dividend_calendar', portfolio_id=portfolio.id) }}" class="btn btn-info">Zobrazit dividendový kalendář</a>
+               </div>
+                <!-- Odkaz na stránku trades.html -->
+                <div class="text-center mb-4">
+                    <a href="{{ url_for('portfolio.trades', portfolio_id=portfolio.id) }}" class="btn btn-secondary">Zobrazit obchody</a>
+                </div>            
             </div>
         </div>
 
@@ -73,6 +93,7 @@
                         <div class="card-body">
                             <h5 class="card-title">{{ stock.ticker }}</h5>
                             <p class="card-text">
+                                <strong>Počet:</strong> {{ stock.pocet }}<br>
                                 <strong>Kupní hodnota:</strong> {{ stock.kupni_hodnota }} €<br>
                                 <strong>Aktuální hodnota:</strong> {{ stock.aktualni_hodnota }} €<br>
                                 <strong>Profit:</strong> {{ stock.profit }} €
@@ -158,30 +179,3 @@
         });
     </script>
 {% endblock %}
-
-<!-- Stávající kód pro zobrazení portfolia -->
-
-<hr>
-
-<!-- Formulář pro přidání nové obchodní transakce -->
-<h2 class="mt-5 text-center">Přidat novou transakci do portfolia</h2>
-<form method="POST" action="{{ url_for('portfolio.select_portfolio', portfolio_id=portfolio.id) }}" class="mt-4 p-4 border rounded shadow-sm bg-light">
-    <div class="form-group">
-        <label for="isin"><strong>Ticker</strong></label>
-        <input type="text" class="form-control" id="isin" name="isin" placeholder="Zadejte ticker akcie" required>
-    </div>
-    <div class="form-group">
-        <label for="count"><strong>Počet akcií</strong></label>
-        <input type="number" class="form-control" id="count" name="count" placeholder="Zadejte počet akcií" required>
-    </div>
-    <div class="form-group">
-        <label for="price"><strong>Cena za akcii</strong></label>
-        <input type="number" step="0.01" class="form-control" id="price" name="price" placeholder="Zadejte cenu za akcii" required>
-    </div>
-    <div class="form-group">
-        <label for="currency"><strong>Měna</strong></label>
-        <input type="text" class="form-control" id="currency" name="currency" placeholder="Zadejte měnu (např. CZK, USD)" required>
-    </div>
-    <button type="submit" class="btn btn-success btn-block mt-4"><i class="fas fa-plus"></i> Přidat transakci</button>
-</form>
-
