@@ -185,15 +185,21 @@ def select_portfolio(portfolio_id):
         flash('Soubor je prázdný nebo neplatný.', 'error')
         return redirect(url_for('portfolio.upload'))
 
-    # Předání objektu portfolio do šablony process.html
+    # Výpočty pro portfolio
     tickers_prices, portfolio_value, invested_amount, investment_duration, avg_monthly_investment, stock_info_list, position_percentages, position_labels = calculate_portfolio_results(data)
+    
+    # Výpočet dividendových údajů
+    dividend_results = calculate_dividend_cash(data)
 
     return render_template('process.html',
                            results={
                                'portfolio_value': f"{round(portfolio_value, 2)} €",
                                'realized_profit': f"{round(calculate_realized_profit(data), 2)} €",
                                'unrealized_profit': f"{round(calculate_unrealized_profit(portfolio_value, invested_amount), 2)} €",
-                               'total_dividends': f"{round(calculate_dividend_cash(data)['total_dividends'], 2)} €",
+                               'total_dividends': f"{round(dividend_results['total_dividends'], 2)} €",
+                               'dividend_yield': f"{round(dividend_results['dividend_yield'], 2)} %",
+                               'dividend_prediction_10_years': f"{round(dividend_results['dividend_prediction_10_years'], 2)} €",
+                               'tax_on_dividends': f"{round(dividend_results['tax_on_dividends'], 2)} €",
                                'total_fees': f"{round(calculate_fees(data), 2)} €",
                                'invested': f"{round(invested_amount, 2)} €"
                            },
@@ -205,6 +211,7 @@ def select_portfolio(portfolio_id):
                            stock_info_list=stock_info_list,
                            investment_duration=investment_duration,
                            avg_monthly_investment=round(avg_monthly_investment, 2))
+
 
 # Route pro zobrazení detailů investic
 @portfolio_bp.route('/investment_details', methods=['GET'])
@@ -238,8 +245,8 @@ from flask import session, request, redirect, flash, url_for, render_template
 from flask_login import login_required, current_user
 from models import db, Portfolio, Trade
 from datetime import datetime
+from manual import store_manual_trade  # Importujeme funkci z manual.py
 
-# Přidání nového obchodu do portfolia
 @portfolio_bp.route('/trades/add/<int:portfolio_id>', methods=['POST'])
 @login_required
 def add_trade(portfolio_id):
@@ -267,13 +274,16 @@ def add_trade(portfolio_id):
         typ_obchodu=typ_obchodu,
         ticker=ticker,
         cena=cena,
-        pocet=pocet,  # Uložíme počet
-        hodnota=hodnota,  # Hodnota se počítá jako cena * počet
+        pocet=pocet,
+        hodnota=hodnota,
         poplatky=poplatky
     )
     
     db.session.add(novy_obchod)
     db.session.commit()
+
+    # Předání nové transakce do manual.py pro další zpracování
+    store_manual_trade(portfolio_id, ticker, datum, typ_obchodu, cena, pocet, hodnota, poplatky)
 
     flash('Obchod byl úspěšně přidán.', 'success')
     return redirect(url_for('portfolio.trades', portfolio_id=portfolio_id))
@@ -355,6 +365,144 @@ def delete_trade(trade_id, portfolio_id):
     flash('Obchod byl úspěšně smazán.', 'success')
     return redirect(url_for('portfolio.trades', portfolio_id=portfolio_id))
 
+import requests
+from dotenv import load_dotenv
+import os
+
+# Načtení proměnných z .env souboru
+load_dotenv()
+
+# Definice API klíče
+POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
+
+from datetime import datetime
+
+from datetime import datetime
+import requests
+import pandas as pd
+from flask import render_template, flash, redirect, url_for
+from flask_login import current_user, login_required
+from io import BytesIO
+
+def get_filtered_dividend_calendar(data):
+    dividend_calendar = []
+
+    # Získání počátečního data portfolia
+    portfolio_start_date = data['Datum'].min()
+    
+    unique_isins = data['ISIN'].unique()
+    for isin in unique_isins:
+        ticker = get_ticker_from_isin(isin)
+        if not ticker:
+            continue
+        
+        stock_transactions = data[data['ISIN'] == isin].sort_values(by='Datum')
+        holding = 0
+        start_date = portfolio_start_date
+        end_date = None
+        
+        for _, transaction in stock_transactions.iterrows():
+            date = transaction['Datum']
+            quantity = transaction['Počet']
+
+            if quantity > 0:
+                if holding == 0:
+                    start_date = max(portfolio_start_date, date)
+                holding += quantity
+
+            elif quantity < 0:
+                holding += quantity
+                if holding == 0:
+                    end_date = date
+                    add_dividends_to_calendar(dividend_calendar, ticker, isin, start_date, end_date, portfolio_start_date, data)
+                    start_date = None
+
+        # Handle remaining holding
+        if holding > 0:
+            add_dividends_to_calendar(dividend_calendar, ticker, isin, start_date, None, portfolio_start_date, data)
+    
+    dividend_calendar = sorted(dividend_calendar, key=lambda x: x['ex_date'])
+    return dividend_calendar
+
+def add_dividends_to_calendar(dividend_calendar, ticker, isin, start_date, end_date, portfolio_start_date, data):
+    dividends = get_dividend_data_polygon(ticker, portfolio_start_date)
+    if dividends:
+        for dividend in dividends:
+            ex_date = dividend.get('exDate')
+            amount_per_share = dividend.get('amount')
+            
+            if start_date and (ex_date >= start_date) and (not end_date or ex_date <= end_date):
+                relevant_transactions = data[(data['ISIN'] == isin) & (data['Datum'] <= ex_date)]
+                shares_held = relevant_transactions['Počet'].sum()
+                
+                total_amount = amount_per_share * shares_held
+                
+                print(f"Dividend added for {ticker} on {ex_date} - Total Amount: {total_amount}")
+                dividend_calendar.append({
+                    'ticker': ticker,
+                    'ex_date': ex_date,
+                    'amount': total_amount
+                })
+
+# Funkce pro získání dividendových dat s omezením od data zahájení portfolia
+def get_dividend_data_polygon(ticker, start_date):
+    if not ticker:
+        return None
+    try:
+        # Format the start_date correctly for API compatibility
+        start_year = datetime.strptime(start_date, "%Y-%m-%d").year
+        url = f"https://api.polygon.io/v2/reference/dividends/{ticker}?apiKey={POLYGON_API_KEY}&start_date={start_year}-01-01"
+        
+        response = requests.get(url)
+        if response.status_code == 200:
+            dividend_data = response.json().get('results', [])
+            
+            # Parse dates and filter based on `start_date`
+            filtered_dividends = []
+            for dividend in dividend_data:
+                ex_date_str = dividend.get('exDate')
+                ex_date = datetime.strptime(ex_date_str, "%Y-%m-%d").date()
+                
+                if ex_date >= datetime.strptime(start_date, "%Y-%m-%d").date():
+                    filtered_dividends.append({
+                        'exDate': ex_date_str,
+                        'amount': dividend.get('amount')
+                    })
+                    
+            print(f"Dividends for {ticker}: {filtered_dividends}")  # Debugging output
+            return filtered_dividends
+        else:
+            print(f"Error fetching dividends for {ticker}: {response.status_code}")
+            return None
+    except Exception as e:
+        print(f"Error fetching dividends for {ticker}: {str(e)}")
+        return None
+    
+# Route pro dividendový kalendář
+@portfolio_bp.route('/portfolio/dividend_calendar/<int:portfolio_id>', methods=['GET'])
+@login_required
+def dividend_calendar(portfolio_id):
+    portfolio = Portfolio.query.get_or_404(portfolio_id)
+
+    if portfolio.user != current_user:
+        flash('Nemáte oprávnění k zobrazení tohoto portfolia.', 'error')
+        return redirect(url_for('portfolio.upload'))
+
+    csv_data = BytesIO(portfolio.data)
+    try:
+        data = pd.read_csv(csv_data, encoding='utf-8')
+        data['Datum'] = pd.to_datetime(data['Datum'], format='%d-%m-%Y', errors='coerce').dt.strftime('%Y-%m-%d')
+    except pd.errors.EmptyDataError:
+        flash('Soubor je prázdný nebo neplatný.', 'error')
+        return redirect(url_for('portfolio.upload'))
+
+    dividend_calendar = get_filtered_dividend_calendar(data)
+    print(f"Dividend calendar: {dividend_calendar}")
+
+    return render_template('dividend_calendar.html',
+                           portfolio=portfolio,
+                           dividend_calendar=dividend_calendar)
+
 # Route pro smazání portfolia
 @portfolio_bp.route('/delete_portfolio/<int:portfolio_id>', methods=['POST'])
 @login_required
@@ -369,5 +517,3 @@ def delete_portfolio(portfolio_id):
     db.session.commit()
     flash('Portfolio bylo úspěšně smazáno.', 'success')
     return redirect(url_for('portfolio.upload'))
-
-
