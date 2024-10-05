@@ -221,8 +221,9 @@ def get_ticker_from_isin(isin):
     
     return None
 
-# Funkce pro získání dividendových dat z Polygon.io
+import requests
 
+# Funkce pro získání dividendových dat z Polygon.io
 def get_dividend_data_polygon(ticker):
     if not ticker:
         return None
@@ -240,62 +241,70 @@ def get_dividend_data_polygon(ticker):
     except Exception as e:
         print(f"Chyba při získávání dividend pro {ticker}: {str(e)}")
         return None
-    
-    # Výpočet celkových dividend na základě tickeru a dat o dividendách
+
+# Výpočet celkových dividend na základě tickeru a dat o dividendách
 def calculate_total_dividends(data):
     total_dividends = 0
     for _, row in data.iterrows():
-        # Získání tickeru na základě ISIN
         ticker = get_ticker_from_isin(row['ISIN'])
-        dividends = get_dividend_data_polygon(ticker)
-        
-        if dividends:
-            # Spočítáme dividendy pro každou akcii, kterou vlastníme
-            for dividend in dividends:
-                dividend_amount = dividend['amount']
-                # Pokud není sloupec 'Počet_x', zkusíme použít 'Počet'
-                total_dividends += dividend_amount * row.get('Počet_x', row['Počet'])
+        if ticker:
+            dividends = get_dividend_data_polygon(ticker)
+            if dividends:
+                for dividend in dividends:
+                    dividend_amount = dividend['amount']
+                    total_dividends += dividend_amount * row.get('Počet_x', row.get('Počet', 0))
     return round(total_dividends, 2)
 
-# Výpočet dividendového výnosu
+# Výpočet dividendového výnosu (dividend yield)
 def calculate_dividend_yield(total_dividends, portfolio_value):
     if portfolio_value == 0:
-        return 0
+        print("Portfolio value is zero, cannot calculate dividend yield.")
+        return 0  # Abychom se vyhnuli dělení nulou
     return round((total_dividends / portfolio_value) * 100, 2)
 
 # Predikce dividend na 10 let
 def predict_dividends_for_10_years(total_dividends):
     return round(total_dividends * 10, 2)
 
-# Výpočet daně z dividend
-def calculate_tax_on_dividends(total_dividends, tax_rate=15):
+# Výpočet daně z dividend (14 %)
+def calculate_tax_on_dividends(total_dividends, tax_rate=14):
+    if total_dividends == 0:
+        print("No dividends, no tax.")
+        return 0  # Pokud nejsou žádné dividendy, není žádná daň
     tax_amount = total_dividends * (tax_rate / 100)
     return round(tax_amount, 2)
 
+# Hlavní funkce pro výpočet všech dividendových údajů a jejich souhrn
 def calculate_dividend_cash(data):
     # Spočítáme celkové dividendy
     total_dividends = calculate_total_dividends(data)
-    
+    print(f"Celková výše dividend: {total_dividends}")  # Ladicí výstup
+
     # Spočítáme hodnotu portfolia
     portfolio_value = calculate_portfolio_value(data)
-    
+    print(f"Hodnota portfolia: {portfolio_value}")  # Ladicí výstup
+
     # Spočítáme dividendový výnos
     dividend_yield = calculate_dividend_yield(total_dividends, portfolio_value)
-    
+    print(f"Dividendový výnos: {dividend_yield}%")  # Ladicí výstup
+
     # Predikce dividend na 10 let
     dividend_prediction_10_years = predict_dividends_for_10_years(total_dividends)
-    
-    # Spočítáme daň z dividend
+    print(f"Predikce dividend na 10 let: {dividend_prediction_10_years} €")  # Ladicí výstup
+
+    # Spočítáme daň z dividend (14 %)
     tax_on_dividends = calculate_tax_on_dividends(total_dividends)
-    
+    print(f"Daň z dividend: {tax_on_dividends} €")  # Ladicí výstup
+
     # Výsledky
     results = {
         "total_dividends": total_dividends,
         "dividend_yield": dividend_yield,
         "dividend_prediction_10_years": dividend_prediction_10_years,
-        "tax_on_dividends": tax_on_dividends
+        "tax_on_dividends": tax_on_dividends,
+        "portfolio_value": portfolio_value
     }
-    
+
     return results
 
 def calculate_fees(data):
@@ -308,6 +317,4 @@ def calculate_fees(data):
         return total_fees
     else:
         return 0
-    
-
 
