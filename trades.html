@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}FIP{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            color: #1d1d1f;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .navbar {
+            background-color: #212529;
+        }
+        .navbar-brand {
+            font-weight: bold;
+            color: #ffffff !important;
+        }
+        .navbar-nav .nav-link {
+            color: #f8f9fa !important;
+            margin-right: 15px;
+        }
+        .navbar-nav .nav-link:hover {
+            color: #adb5bd !important;
+        }
+        .footer {
+            background-color: #212529;
+            color: #f8f9fa;
+            padding: 10px 0;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            text-align: center;
+        }
+        .card-header {
+            background-color: #495057;
+            color: white;
+            font-weight: bold;
+        }
+        .btn-custom {
+            background-color: #17a2b8;
+            color: white;
+            border-radius: 10px;
+            padding: 10px 20px;
+            font-size: 1.1rem;
+        }
+        .form-control {
+            border-radius: 10px;
+        }
+        .table-striped > tbody > tr:nth-of-type(odd) {
+            background-color: rgba(23, 162, 184, 0.05);
+        }
+        .table-striped > tbody > tr:nth-of-type(even) {
+            background-color: rgba(23, 162, 184, 0.15);
+        }
+        .badge-success {
+            background-color: #28a745;
+        }
+        .badge-danger {
+            background-color: #dc3545;
+        }
+        .form-group label {
+            font-weight: bold;
+            color: #495057;
+        }
+        .form-group input::placeholder {
+            font-style: italic;
+            color: #6c757d;
+        }
+        .text-center button {
+            transition: background-color 0.3s ease;
+        }
+        .text-center button:hover {
+            background-color: #138496;
+        }
+        .card-body {
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <a class="navbar-brand" href="/">FIP</a>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav ml-auto">
+                {% if current_user.is_authenticated %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="/portfolio/upload">Moje Portfolia</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/auth/logout">Odhlásit se</a>
+                    </li>
+                {% else %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="/auth/signup">Zaregistrovat</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/auth/login">Přihlásit se</a>
+                    </li>
+                {% endif %}
+                <li class="nav-item">
+                    <a class="nav-link" href="/stock/search_stocks_form">Vyhledávání akcií</a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container mt-5">
+        <div class="card shadow-lg">
+            <div class="card-header text-center">
+                <h4 class="mb-0">Přidat novou transakci</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('portfolio.add_trade', portfolio_id=portfolio_id) }}">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group mb-4">
+                                <label for="datum" class="form-label">Datum</label>
+                                <input type="date" class="form-control" id="datum" name="datum" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group mb-4">
+                                <label for="typ" class="form-label">Typ obchodu</label>
+                                <select class="form-select" id="typ" name="typ" class="form-control">
+                                    <option value="nákup">Nákup</option>
+                                    <option value="prodej">Prodej</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-group mb-4">
+                                <label for="ticker" class="form-label">Ticker</label>
+                                <input type="text" class="form-control" id="ticker" name="ticker" placeholder="Např. AAPL, TSLA" required>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group mb-4">
+                                <label for="cena" class="form-label">Jednotková cena (€)</label>
+                                <input type="number" step="0.01" class="form-control" id="cena" name="cena" required>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group mb-4">
+                                <label for="pocet" class="form-label">Počet</label>
+                                <input type="number" class="form-control" id="pocet" name="pocet" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group mb-4">
+                                <label for="hodnota" class="form-label">Hodnota (€)</label>
+                                <input type="number" step="0.01" class="form-control" id="hodnota" name="hodnota" readonly>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group mb-4">
+                                <label for="poplatky" class="form-label">Poplatky (€)</label>
+                                <input type="number" step="0.01" class="form-control" id="poplatky" name="poplatky">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-center mt-4">
+                        <button type="submit" class="btn btn-custom btn-lg px-5">Přidat obchod</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Seznam obchodů -->
+        <div class="card shadow-lg mt-5">
+            <div class="card-header text-center">
+                <h4 class="mb-0">Vaše transakce</h4>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-striped table-hover table-bordered mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th scope="col">Datum</th>
+                            <th scope="col">Typ obchodu</th>
+                            <th scope="col">Ticker</th>
+                            <th scope="col">Jednotková cena (€)</th>
+                            <th scope="col">Počet</th>
+                            <th scope="col">Hodnota (€)</th>
+                            <th scope="col">Poplatky (€)</th>
+                            <th scope="col">Akce</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for trade in trades %}
+                        <tr class="{% if trade['Typ obchodu'] == 'nákup' %}table-success{% else %}table-danger{% endif %}">
+                            <td>{{ trade['Datum'] }}</td>
+                            <td>
+                                <span class="badge {% if trade['Typ obchodu'] == 'nákup' %}badge-success{% else %}badge-danger{% endif %}">
+                                    {{ trade['Typ obchodu'] }}
+                                </span>
+                            </td>
+                            <td>{{ trade['Ticker'] }}</td>
+                            <td>{{ trade['Cena'] }} €</td>
+                            <td>{{ trade['Počet'] }}</td>
+                            <td>{{ trade['Hodnota'] }} €</td>
+                            <td>{{ trade['Transaction and/or third'] }} €</td>
+                            <td>
+                                {% if trade['id'] %}
+                                <form action="{{ url_for('portfolio.delete_trade', trade_id=trade['id'], portfolio_id=portfolio_id) }}" method="POST" style="display:inline;">
+                                    <button type="submit" class="btn btn-danger btn-sm">Smazat</button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="text-center mt-4">
+            <a href="{{ url_for('portfolio.select_portfolio', portfolio_id=portfolio_id) }}" class="btn btn-primary btn-lg px-5">Zpět na portfolio</a>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <span>Staň se lepším investorem | FIP © 2024</span>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
