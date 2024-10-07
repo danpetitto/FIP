@@ -19,7 +19,7 @@ from datetime import timedelta
 portfolio_bp = Blueprint('portfolio', __name__)
 
 # Funkce pro výpočet výsledků portfolia (včetně načtení tickerů, cen a sektorů)
-def calculate_portfolio_results(data):
+def calculate_calculate_dividend_cash(data):
     tickers_prices = {
         'ticker': {},
         'current_price': {},
@@ -185,15 +185,21 @@ def select_portfolio(portfolio_id):
         flash('Soubor je prázdný nebo neplatný.', 'error')
         return redirect(url_for('portfolio.upload'))
 
-    # Předání objektu portfolio do šablony process.html
-    tickers_prices, portfolio_value, invested_amount, investment_duration, avg_monthly_investment, stock_info_list, position_percentages, position_labels = calculate_portfolio_results(data)
+    # Výpočty pro portfolio
+    tickers_prices, portfolio_value, invested_amount, investment_duration, avg_monthly_investment, stock_info_list, position_percentages, position_labels = calculate_calculate_dividend_cash(data)
+    
+    # Výpočet dividendových údajů
+    dividend_results = calculate_dividend_cash(data)
 
     return render_template('process.html',
                            results={
                                'portfolio_value': f"{round(portfolio_value, 2)} €",
                                'realized_profit': f"{round(calculate_realized_profit(data), 2)} €",
                                'unrealized_profit': f"{round(calculate_unrealized_profit(portfolio_value, invested_amount), 2)} €",
-                               'total_dividends': f"{round(calculate_dividend_cash(data)['total_dividends'], 2)} €",
+                               'total_dividends': f"{round(dividend_results['total_dividends'], 2)} €",
+                               'dividend_yield': f"{round(dividend_results['dividend_yield'], 2)} %",
+                               'dividend_prediction_10_years': f"{round(dividend_results['dividend_prediction_10_years'], 2)} €",
+                               'tax_on_dividends': f"{round(dividend_results['tax_on_dividends'], 2)} €",
                                'total_fees': f"{round(calculate_fees(data), 2)} €",
                                'invested': f"{round(invested_amount, 2)} €"
                            },
@@ -205,6 +211,7 @@ def select_portfolio(portfolio_id):
                            stock_info_list=stock_info_list,
                            investment_duration=investment_duration,
                            avg_monthly_investment=round(avg_monthly_investment, 2))
+
 
 # Route pro zobrazení detailů investic
 @portfolio_bp.route('/investment_details', methods=['GET'])
@@ -234,9 +241,11 @@ def investment_details():
                            investment_history=investment_history,
                            yearly_totals=yearly_totals)
 
-from flask import session
-
-from flask import request
+from flask import session, request, redirect, flash, url_for, render_template
+from flask_login import login_required, current_user
+from models import db, Portfolio, Trade
+from datetime import datetime
+from manual import store_manual_trade  # Importujeme funkci z manual.py
 
 @portfolio_bp.route('/trades/add/<int:portfolio_id>', methods=['POST'])
 @login_required
@@ -247,51 +256,53 @@ def add_trade(portfolio_id):
         flash('Nemáte oprávnění k zobrazení tohoto portfolia.', 'error')
         return redirect(url_for('portfolio.upload'))
 
-    # Načtení formulářových dat
+    # Načtení dat z formuláře
     datum = request.form.get('datum')
     typ_obchodu = request.form.get('typ')
     ticker = request.form.get('ticker')
     cena = float(request.form.get('cena', 0))
-    hodnota = float(request.form.get('hodnota', 0))
+    pocet = int(request.form.get('pocet', 1))  # Počet akcií
     poplatky = float(request.form.get('poplatky', 0))
 
-    # Debugování, abyste viděli, co je ve formuláři
-    print(f"Datum: {datum}, Typ obchodu: {typ_obchodu}, Ticker: {ticker}, Cena: {cena}, Hodnota: {hodnota}, Poplatky: {poplatky}")
+    # Vypočítáme hodnotu
+    hodnota = cena * pocet
 
-    # Vytvoření nového obchodu jako dictionary
-    novy_obchod = {
-        'Datum': datum,
-        'Typ obchodu': typ_obchodu,
-        'Ticker': ticker,
-        'Cena': cena,
-        'Hodnota': hodnota,
-        'Transaction and/or third': poplatky
-    }
+    # Vytvoření nové transakce a uložení do databáze
+    novy_obchod = Trade(
+        portfolio_id=portfolio_id,
+        datum=datetime.strptime(datum, '%Y-%m-%d'),
+        typ_obchodu=typ_obchodu,
+        ticker=ticker,
+        cena=cena,
+        pocet=pocet,
+        hodnota=hodnota,
+        poplatky=poplatky
+    )
+    
+    db.session.add(novy_obchod)
+    db.session.commit()
 
-    # Kontrola session a přidání nového obchodu
-    if 'manual_trades' not in session:
-        session['manual_trades'] = []
-
-    manual_trades = session['manual_trades']
-    manual_trades.append(novy_obchod)
-    session['manual_trades'] = manual_trades
-    session.modified = True  # zajistí, že session bude uložena
+    # Předání nové transakce do manual.py pro další zpracování
+    store_manual_trade(portfolio_id, ticker, datum, typ_obchodu, cena, pocet, hodnota, poplatky)
 
     flash('Obchod byl úspěšně přidán.', 'success')
     return redirect(url_for('portfolio.trades', portfolio_id=portfolio_id))
 
+# Zobrazení obchodů pro konkrétní portfolio
 @portfolio_bp.route('/trades/<int:portfolio_id>', methods=['GET'])
 @login_required
 def trades(portfolio_id):
     # Načteme portfolio z databáze
     portfolio = Portfolio.query.get_or_404(portfolio_id)
 
-    # Ověříme, zda aktuální uživatel má přístup k portfoliu
     if portfolio.user != current_user:
         flash('Nemáte oprávnění k zobrazení tohoto portfolia.', 'error')
         return redirect(url_for('portfolio.upload'))
 
-    # Načtení dat z CSV souboru v portfoliu
+    # Načteme obchody z databáze
+    trades_data_from_db = Trade.query.filter_by(portfolio_id=portfolio_id).order_by(Trade.datum.desc()).all()
+
+    # Načtení dat z CSV souboru v portfoliu (pokud existuje)
     csv_data = BytesIO(portfolio.data)
     try:
         data = pd.read_csv(csv_data, encoding='utf-8')
@@ -299,38 +310,301 @@ def trades(portfolio_id):
         flash('Soubor je prázdný nebo neplatný.', 'error')
         return redirect(url_for('portfolio.upload'))
 
-    # Kontrola, zda existuje sloupec 'ISIN', a pokud ano, převedeme ho na 'Ticker'
     if 'ISIN' in data.columns:
         data['Ticker'] = data['ISIN'].apply(get_ticker_from_isin)
     else:
-        flash('Sloupec ISIN není ve vašem souboru dostupný.', 'error')
+        flash('Soubor neobsahuje sloupec "ISIN".', 'error')
         return redirect(url_for('portfolio.upload'))
 
-    # Výpočet typu obchodu a hodnoty
-    data['Typ obchodu'] = data['Počet'].apply(lambda x: 'nákup' if x > 0 else 'prodej')
-    data['Hodnota'] = data['Cena'] * abs(data['Počet'])
+    # Převod CSV na seznam obchodů
+    if 'Počet' in data.columns and 'Cena' in data.columns:
+        data['Typ obchodu'] = data['Počet'].apply(lambda x: 'nákup' if x > 0 else 'prodej')
+        data['Hodnota'] = data['Cena'] * abs(data['Počet'])
 
-    # Pokud chybí sloupec pro poplatky, přidáme ho
-    if 'Transaction and/or third' not in data.columns:
-        data['Transaction and/or third'] = 0
+        if 'Transaction and/or third' not in data.columns:
+            data['Transaction and/or third'] = 0
 
-    # Převedeme data z CSV do seznamu slovníků
-    trades_data_from_csv = data[['Datum', 'Typ obchodu', 'Ticker', 'Cena', 'Hodnota', 'Transaction and/or third']].to_dict(orient='records')
+        # Přidáme počet do slovníků
+        trades_data_from_csv = data[['Datum', 'Typ obchodu', 'Ticker', 'Cena', 'Počet', 'Hodnota', 'Transaction and/or third']].to_dict(orient='records')
+    else:
+        flash('Soubor neobsahuje potřebné sloupce "Počet" nebo "Cena".', 'error')
+        trades_data_from_csv = []
 
-    # Načteme ručně přidané obchody ze session (pokud existují)
-    manual_trades = session.get('manual_trades', [])
+    # Spojení obchodů z CSV a z databáze
+    trades_data_combined = trades_data_from_csv + [{
+        'Datum': trade.datum.strftime('%Y-%m-%d'),
+        'Typ obchodu': trade.typ_obchodu,
+        'Ticker': trade.ticker,
+        'Cena': trade.cena,
+        'Počet': trade.pocet,
+        'Hodnota': trade.hodnota,
+        'Transaction and/or third': trade.poplatky
+    } for trade in trades_data_from_db]
 
-    # Debugging - výpis ručně přidaných obchodů
-    print(f"Manual trades from session: {manual_trades}")
-
-    # Spojíme obchody z CSV a manuálně přidané obchody (nové obchody jsou nahoře)
-    trades_data_combined = manual_trades + trades_data_from_csv
-
-    # Debugging - výpis kombinovaných dat
-    print(f"Combined trades data: {trades_data_combined}")
-
-    # Předání kombinovaných dat do šablony
+    # Zobrazení obchodů ve šabloně
     return render_template('trades.html', trades=trades_data_combined, portfolio_id=portfolio_id)
+
+# Smazání transakce
+@portfolio_bp.route('/trades/delete/<int:trade_id>/<int:portfolio_id>', methods=['POST'])
+@login_required
+def delete_trade(trade_id, portfolio_id):
+    # Najdeme transakci podle ID
+    trade_to_delete = Trade.query.get_or_404(trade_id)
+    
+    # Ověříme, zda uživatel má oprávnění k portfoliu, ke kterému transakce patří
+    portfolio = Portfolio.query.get_or_404(portfolio_id)
+    
+    if portfolio.user != current_user:
+        flash('Nemáte oprávnění smazat tento obchod.', 'error')
+        return redirect(url_for('portfolio.trades', portfolio_id=portfolio_id))
+
+    # Smazání transakce
+    db.session.delete(trade_to_delete)
+    db.session.commit()
+
+    flash('Obchod byl úspěšně smazán.', 'success')
+    return redirect(url_for('portfolio.trades', portfolio_id=portfolio_id))
+
+import requests
+from dotenv import load_dotenv
+import os
+
+# Načtení proměnných z .env souboru
+load_dotenv()
+
+# Definice API klíče
+POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
+
+from datetime import datetime
+
+from datetime import datetime
+import requests
+import pandas as pd
+from flask import render_template, flash, redirect, url_for
+from flask_login import current_user, login_required
+from io import BytesIO
+from collections import defaultdict
+
+def get_filtered_dividend_calendar(data):
+    dividend_calendar = defaultdict(lambda: defaultdict(float))
+
+    portfolio_start_date = data['Datum'].min()
+    unique_isins = data['ISIN'].unique()
+    
+    for isin in unique_isins:
+        ticker = get_ticker_from_isin(isin)
+        if not ticker:
+            continue
+        
+        stock_transactions = data[data['ISIN'] == isin].sort_values(by='Datum')
+        holding = 0
+        start_date = portfolio_start_date
+        end_date = None
+        
+        for _, transaction in stock_transactions.iterrows():
+            date = transaction['Datum']
+            quantity = transaction['Počet']
+
+            if quantity > 0:
+                if holding == 0:
+                    start_date = max(portfolio_start_date, date)
+                holding += quantity
+            elif quantity < 0:
+                holding += quantity
+                if holding == 0:
+                    end_date = date
+                    add_dividends_to_calendar(dividend_calendar, ticker, isin, start_date, end_date, portfolio_start_date, data)
+                    start_date = None
+        
+        if holding > 0:
+            add_dividends_to_calendar(dividend_calendar, ticker, isin, start_date, None, portfolio_start_date, data)
+    
+    return dict(dividend_calendar)
+
+def add_dividends_to_calendar(dividend_calendar, ticker, isin, start_date, end_date, portfolio_start_date, data):
+    dividends = get_dividend_data_polygon(ticker, portfolio_start_date)
+    if dividends:
+        for dividend in dividends:
+            ex_date = dividend.get('exDate')
+            amount_per_share = dividend.get('amount')
+            
+            if start_date and (ex_date >= start_date) and (not end_date or ex_date <= end_date):
+                relevant_transactions = data[(data['ISIN'] == isin) & (data['Datum'] <= ex_date)]
+                shares_held = relevant_transactions['Počet'].sum()
+                total_amount = amount_per_share * shares_held
+
+                ex_date_obj = datetime.strptime(ex_date, "%Y-%m-%d")
+                year = ex_date_obj.year
+                month = ex_date_obj.strftime('%B')  # Get the month as string (e.g., 'January')
+                
+                dividend_calendar[year][month] += total_amount
+
+# Funkce pro získání dividendových dat s omezením od data zahájení portfolia
+def get_dividend_data_polygon(ticker, start_date):
+    if not ticker:
+        return None
+    try:
+        # Format the start_date correctly for API compatibility
+        start_year = datetime.strptime(start_date, "%Y-%m-%d").year
+        url = f"https://api.polygon.io/v2/reference/dividends/{ticker}?apiKey={POLYGON_API_KEY}&start_date={start_year}-01-01"
+        
+        response = requests.get(url)
+        if response.status_code == 200:
+            dividend_data = response.json().get('results', [])
+            
+            # Parse dates and filter based on `start_date`
+            filtered_dividends = []
+            for dividend in dividend_data:
+                ex_date_str = dividend.get('exDate')
+                ex_date = datetime.strptime(ex_date_str, "%Y-%m-%d").date()
+                
+                if ex_date >= datetime.strptime(start_date, "%Y-%m-%d").date():
+                    filtered_dividends.append({
+                        'exDate': ex_date_str,
+                        'amount': dividend.get('amount')
+                    })
+                    
+            print(f"Dividends for {ticker}: {filtered_dividends}")  # Debugging output
+            return filtered_dividends
+        else:
+            print(f"Error fetching dividends for {ticker}: {response.status_code}")
+            return None
+    except Exception as e:
+        print(f"Error fetching dividends for {ticker}: {str(e)}")
+        return None
+    
+# Route pro dividendový kalendář
+@portfolio_bp.route('/portfolio/dividend_calendar/<int:portfolio_id>', methods=['GET'])
+@login_required
+def dividend_calendar(portfolio_id):
+    portfolio = Portfolio.query.get_or_404(portfolio_id)
+
+    if portfolio.user != current_user:
+        flash('Nemáte oprávnění k zobrazení tohoto portfolia.', 'error')
+        return redirect(url_for('portfolio.upload'))
+
+    csv_data = BytesIO(portfolio.data)
+    try:
+        # Načteme CSV data portfolia
+        data = pd.read_csv(csv_data, encoding='utf-8')
+        data['Datum'] = pd.to_datetime(data['Datum'], format='%d-%m-%Y', errors='coerce').dt.strftime('%Y-%m-%d')
+    except pd.errors.EmptyDataError:
+        flash('Soubor je prázdný nebo neplatný.', 'error')
+        return redirect(url_for('portfolio.upload'))
+
+    # Získání historických dividend
+    dividend_calendar = get_filtered_dividend_calendar(data)
+
+    # Získání nadcházejících dividend pro portfolio
+    upcoming_dividends = get_upcoming_dividends_for_portfolio(data)
+
+    # Debugging: Vypíše, co se předává šabloně
+    print(f"Nadcházející dividendy: {upcoming_dividends}")
+
+    return render_template('dividend_calendar.html',
+                           portfolio=portfolio,
+                           dividend_calendar=dividend_calendar,
+                           upcoming_dividends=upcoming_dividends)
+
+#NADCCHÁZEJÍCÍ DIVIDENDY
+
+def get_upcoming_dividend(ticker):
+    """
+    Zjistí nadcházející nebo poslední známé datum výplaty dividend pro konkrétní ticker pomocí Polygon API.
+    """
+    try:
+        # Voláme API Polygon pro nadcházející dividendy
+        url = f"https://api.polygon.io/v3/reference/dividends?ticker={ticker}&order=desc&limit=1&apiKey={POLYGON_API_KEY}"
+        response = requests.get(url)
+        
+        # Debugging API odpovědi
+        print(f"API Response for {ticker}: {response.status_code} - {response.json()}")
+        
+        if response.status_code == 200:
+            data = response.json().get('results', [])
+            
+            # Debug: vypište celý obsah odpovědi API
+            print(f"Výsledek API pro {ticker}: {data}")
+            
+            if data:
+                # Použijeme první dividendu, ať je historická nebo nadcházející
+                dividend = data[0]
+                ex_date = dividend.get('ex_dividend_date')
+                amount = dividend.get('cash_amount')
+
+                # Ověření, zda je datum ex-dividendy v budoucnosti
+                today = datetime.now().date()
+                ex_date_dt = datetime.strptime(ex_date, '%Y-%m-%d').date()
+                
+                # Pokud je v budoucnosti, vrátíme jako nadcházející
+                if ex_date_dt > today:
+                    print(f"Nadcházející dividenda: {amount} USD pro {ticker}, Ex-date: {ex_date}")
+                    return ex_date, amount
+                else:
+                    # Pokud je datum v minulosti, vrátíme poslední známou dividendu
+                    print(f"Poslední známá dividenda: {amount} USD pro {ticker}, Ex-date: {ex_date}")
+                    return ex_date, amount
+            else:
+                print(f"Žádné dividendy vrácené API pro {ticker}.")
+                return None, None
+        else:
+            print(f"Chyba při volání API Polygon pro {ticker}: {response.status_code}")
+            return None, None
+    except Exception as e:
+        print(f"Chyba při zpracování API pro {ticker}: {str(e)}")
+        return None, None
+    
+# Funkce, která zpracuje celé portfolio a zjistí nadcházející dividendy
+def get_upcoming_dividends_for_portfolio(data):
+    unique_isins = data['ISIN'].unique()
+    upcoming_dividends = []
+
+    for isin in unique_isins:
+        ticker = get_ticker_from_isin(isin)
+        if not ticker:
+            print(f"Ticker pro ISIN {isin} nebyl nalezen.")
+            continue
+
+        print(f"Zpracovávám ticker: {ticker}")
+        ex_date, amount = get_upcoming_dividend(ticker)
+        if ex_date and amount:
+            print(f"Nalezená nadcházející dividenda: {ex_date}, {amount}")
+            upcoming_dividends.append({
+                'ticker': ticker,
+                'ex_date': ex_date,
+                'amount': amount
+            })
+        else:
+            print(f"Žádné nadcházející dividendy pro {ticker}.")
+
+    print(f"Nadcházející dividendy pro portfolio: {upcoming_dividends}")
+    return upcoming_dividends
+
+@portfolio_bp.route('/portfolio/upcoming_dividends/<int:portfolio_id>', methods=['GET'])
+@login_required
+def upcoming_dividends(portfolio_id):
+    portfolio = Portfolio.query.get_or_404(portfolio_id)
+
+    if portfolio.user != current_user:
+        flash('Nemáte oprávnění k zobrazení tohoto portfolia.', 'error')
+        return redirect(url_for('portfolio.upload'))
+
+    csv_data = BytesIO(portfolio.data)
+    try:
+        # Načteme CSV data portfolia
+        data = pd.read_csv(csv_data, encoding='utf-8')
+        data['Datum'] = pd.to_datetime(data['Datum'], format='%d-%m-%Y', errors='coerce').dt.strftime('%Y-%m-%d')
+    except pd.errors.EmptyDataError:
+        flash('Soubor je prázdný nebo neplatný.', 'error')
+        return redirect(url_for('portfolio.upload'))
+
+    # Získání nadcházejících dividend pro portfolio
+    upcoming_dividends = get_upcoming_dividends_for_portfolio(data)
+
+    # Debug: Vypíše nadcházející dividendy, které jsou předávány šabloně
+    print(f"Nadcházející dividendy předané šabloně: {upcoming_dividends}")
+
+    return render_template('upcoming_dividends.html', portfolio=portfolio, upcoming_dividends=upcoming_dividends)
 
 # Route pro smazání portfolia
 @portfolio_bp.route('/delete_portfolio/<int:portfolio_id>', methods=['POST'])
