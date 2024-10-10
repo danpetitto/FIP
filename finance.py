@@ -317,4 +317,23 @@ def calculate_fees(data):
         return total_fees
     else:
         return 0
+    
+def calculate_unrealized_profit_percentage(unrealized_profit, portfolio_value):
+    if portfolio_value == 0:
+        return 0  # Vyhneme se dělení nulou
+    return round((unrealized_profit / portfolio_value) * 100, 2)
 
+def calculate_realized_profit_percentage(realized_profit, portfolio_value):
+    if portfolio_value == 0:
+        return 0  # Vyhneme se dělení nulou
+    return round((realized_profit / portfolio_value) * 100, 2)
+
+def calculate_fees_percentage(total_fees, portfolio_value):
+    if portfolio_value == 0:
+        return 0  # Vyhneme se dělení nulou
+    return round((total_fees / portfolio_value) * 100, 2)
+
+def calculate_forex_impact_percentage(forex_impact, portfolio_value):
+    if portfolio_value == 0:
+        return 0  # Vyhneme se dělení nulou
+    return round((forex_impact / portfolio_value) * 100, 2)
