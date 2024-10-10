@@ -15,11 +15,12 @@ from datetime import datetime
 from dateutil import parser
 from investment_history import calculate_investment_history  # Importuje funkce z investment_history.py
 from datetime import timedelta
+from finance import calculate_unrealized_profit_percentage, calculate_realized_profit_percentage, calculate_fees_percentage, calculate_forex_impact_percentage
 
 portfolio_bp = Blueprint('portfolio', __name__)
 
 # Funkce pro výpočet výsledků portfolia (včetně načtení tickerů, cen a sektorů)
-def calculate_portfolio_results(data):
+def calculate_calculate_dividend_cash(data):
     tickers_prices = {
         'ticker': {},
         'current_price': {},
@@ -168,7 +169,6 @@ def upload():
     user_portfolios = Portfolio.query.filter_by(user_id=current_user.id).all()
     return render_template('upload.html', portfolios=user_portfolios)
 
-# Route pro výběr portfolia
 @portfolio_bp.route('/select_portfolio/<int:portfolio_id>', methods=['GET'])
 @login_required
 def select_portfolio(portfolio_id):
@@ -186,32 +186,55 @@ def select_portfolio(portfolio_id):
         return redirect(url_for('portfolio.upload'))
 
     # Výpočty pro portfolio
-    tickers_prices, portfolio_value, invested_amount, investment_duration, avg_monthly_investment, stock_info_list, position_percentages, position_labels = calculate_portfolio_results(data)
+    tickers_prices, portfolio_value, invested_amount, investment_duration, avg_monthly_investment, stock_info_list, position_percentages, position_labels = calculate_calculate_dividend_cash(data)
     
+    # Výpočet měnového dopadu (forex impact)
+    forex_results, total_forex_impact_czk = calculate_forex_profit_loss(data)
+
     # Výpočet dividendových údajů
     dividend_results = calculate_dividend_cash(data)
 
-    return render_template('process.html',
-                           results={
-                               'portfolio_value': f"{round(portfolio_value, 2)} €",
-                               'realized_profit': f"{round(calculate_realized_profit(data), 2)} €",
-                               'unrealized_profit': f"{round(calculate_unrealized_profit(portfolio_value, invested_amount), 2)} €",
-                               'total_dividends': f"{round(dividend_results['total_dividends'], 2)} €",
-                               'dividend_yield': f"{round(dividend_results['dividend_yield'], 2)} %",
-                               'dividend_prediction_10_years': f"{round(dividend_results['dividend_prediction_10_years'], 2)} €",
-                               'tax_on_dividends': f"{round(dividend_results['tax_on_dividends'], 2)} €",
-                               'total_fees': f"{round(calculate_fees(data), 2)} €",
-                               'invested': f"{round(invested_amount, 2)} €"
-                           },
-                           portfolio=portfolio,  # Předání objektu portfolio
-                           stock_labels=['Technology', 'Healthcare', 'Finance'],
-                           stock_percentages=[40, 30, 30],
-                           position_labels=position_labels,
-                           position_percentages=position_percentages,
-                           stock_info_list=stock_info_list,
-                           investment_duration=investment_duration,
-                           avg_monthly_investment=round(avg_monthly_investment, 2))
+    # Výpočet realizovaného a nerealizovaného zisku
+    realized_profit = calculate_realized_profit(data)
+    unrealized_profit = calculate_unrealized_profit(portfolio_value, invested_amount)
+    
+    # Výpočet poplatků
+    total_fees = calculate_fees(data)
+    
+    # Výpočet procentuálních hodnot
+    unrealized_profit_percentage = calculate_unrealized_profit_percentage(unrealized_profit, portfolio_value)
+    realized_profit_percentage = calculate_realized_profit_percentage(realized_profit, portfolio_value)
+    fees_percentage = calculate_fees_percentage(total_fees, portfolio_value)
+    forex_impact_percentage = calculate_forex_impact_percentage(total_forex_impact_czk, portfolio_value)
 
+    return render_template(
+        'process.html',
+        results={
+            'portfolio_value': f"{round(portfolio_value, 2)} €",
+            'realized_profit': f"{round(realized_profit, 2)} €",
+            'realized_profit_percentage': f"{realized_profit_percentage} %",
+            'unrealized_profit': f"{round(unrealized_profit, 2)} €",
+            'unrealized_profit_percentage': f"{unrealized_profit_percentage} %",
+            'total_dividends': f"{round(dividend_results['total_dividends'], 2)} €",
+            'dividend_yield': f"{round(dividend_results['dividend_yield'], 2)} %",
+            'dividend_prediction_10_years': f"{round(dividend_results['dividend_prediction_10_years'], 2)} €",
+            'tax_on_dividends': f"{round(dividend_results['tax_on_dividends'], 2)} €",
+            'total_fees': f"{round(total_fees, 2)} €",
+            'fees_percentage': f"{fees_percentage} %",
+            'invested': f"{round(invested_amount, 2)} €",
+            'forex_impact_czk': f"{round(total_forex_impact_czk, 2)} CZK",  # Měnový dopad v CZK
+            'forex_impact_eur': f"{round(total_forex_impact_czk / get_current_fx_rate('CZK'), 2)} €",  # Měnový dopad v EUR
+            'forex_impact_percentage': f"{forex_impact_percentage} %",
+            'forex_results': forex_results  # Zobrazení jednotlivých výsledků transakcí
+        },
+        portfolio=portfolio,  # Předání objektu portfolio
+        stock_labels=['Technology', 'Healthcare', 'Finance'],
+        stock_percentages=[40, 30, 30],
+        position_labels=position_labels,
+        position_percentages=position_percentages,
+        stock_info_list=stock_info_list,
+        investment_duration=investment_duration
+    )
 
 # Route pro zobrazení detailů investic
 @portfolio_bp.route('/investment_details', methods=['GET'])
@@ -383,14 +406,14 @@ import pandas as pd
 from flask import render_template, flash, redirect, url_for
 from flask_login import current_user, login_required
 from io import BytesIO
+from collections import defaultdict
 
 def get_filtered_dividend_calendar(data):
-    dividend_calendar = []
+    dividend_calendar = defaultdict(lambda: defaultdict(float))
 
-    # Získání počátečního data portfolia
     portfolio_start_date = data['Datum'].min()
-    
     unique_isins = data['ISIN'].unique()
+    
     for isin in unique_isins:
         ticker = get_ticker_from_isin(isin)
         if not ticker:
@@ -409,20 +432,17 @@ def get_filtered_dividend_calendar(data):
                 if holding == 0:
                     start_date = max(portfolio_start_date, date)
                 holding += quantity
-
             elif quantity < 0:
                 holding += quantity
                 if holding == 0:
                     end_date = date
                     add_dividends_to_calendar(dividend_calendar, ticker, isin, start_date, end_date, portfolio_start_date, data)
                     start_date = None
-
-        # Handle remaining holding
+        
         if holding > 0:
             add_dividends_to_calendar(dividend_calendar, ticker, isin, start_date, None, portfolio_start_date, data)
     
-    dividend_calendar = sorted(dividend_calendar, key=lambda x: x['ex_date'])
-    return dividend_calendar
+    return dict(dividend_calendar)
 
 def add_dividends_to_calendar(dividend_calendar, ticker, isin, start_date, end_date, portfolio_start_date, data):
     dividends = get_dividend_data_polygon(ticker, portfolio_start_date)
@@ -434,15 +454,13 @@ def add_dividends_to_calendar(dividend_calendar, ticker, isin, start_date, end_d
             if start_date and (ex_date >= start_date) and (not end_date or ex_date <= end_date):
                 relevant_transactions = data[(data['ISIN'] == isin) & (data['Datum'] <= ex_date)]
                 shares_held = relevant_transactions['Počet'].sum()
-                
                 total_amount = amount_per_share * shares_held
+
+                ex_date_obj = datetime.strptime(ex_date, "%Y-%m-%d")
+                year = ex_date_obj.year
+                month = ex_date_obj.strftime('%B')  # Get the month as string (e.g., 'January')
                 
-                print(f"Dividend added for {ticker} on {ex_date} - Total Amount: {total_amount}")
-                dividend_calendar.append({
-                    'ticker': ticker,
-                    'ex_date': ex_date,
-                    'amount': total_amount
-                })
+                dividend_calendar[year][month] += total_amount
 
 # Funkce pro získání dividendových dat s omezením od data zahájení portfolia
 def get_dividend_data_polygon(ticker, start_date):
@@ -490,30 +508,241 @@ def dividend_calendar(portfolio_id):
 
     csv_data = BytesIO(portfolio.data)
     try:
+        # Načteme CSV data portfolia
         data = pd.read_csv(csv_data, encoding='utf-8')
         data['Datum'] = pd.to_datetime(data['Datum'], format='%d-%m-%Y', errors='coerce').dt.strftime('%Y-%m-%d')
     except pd.errors.EmptyDataError:
         flash('Soubor je prázdný nebo neplatný.', 'error')
         return redirect(url_for('portfolio.upload'))
 
+    # Získání historických dividend
     dividend_calendar = get_filtered_dividend_calendar(data)
-    print(f"Dividend calendar: {dividend_calendar}")
+
+    # Získání nadcházejících dividend pro portfolio
+    upcoming_dividends = get_upcoming_dividends_for_portfolio(data)
+
+    # Debugging: Vypíše, co se předává šabloně
+    print(f"Nadcházející dividendy: {upcoming_dividends}")
 
     return render_template('dividend_calendar.html',
                            portfolio=portfolio,
-                           dividend_calendar=dividend_calendar)
+                           dividend_calendar=dividend_calendar,
+                           upcoming_dividends=upcoming_dividends)
 
-# Route pro smazání portfolia
+#NADCCHÁZEJÍCÍ DIVIDENDY
+
+def get_upcoming_dividend(ticker):
+    """
+    Zjistí nadcházející nebo poslední známé datum výplaty dividend pro konkrétní ticker pomocí Polygon API.
+    """
+    try:
+        # Voláme API Polygon pro nadcházející dividendy
+        url = f"https://api.polygon.io/v3/reference/dividends?ticker={ticker}&order=desc&limit=1&apiKey={POLYGON_API_KEY}"
+        response = requests.get(url)
+        
+        # Debugging API odpovědi
+        print(f"API Response for {ticker}: {response.status_code} - {response.json()}")
+        
+        if response.status_code == 200:
+            data = response.json().get('results', [])
+            
+            # Debug: vypište celý obsah odpovědi API
+            print(f"Výsledek API pro {ticker}: {data}")
+            
+            if data:
+                # Použijeme první dividendu, ať je historická nebo nadcházející
+                dividend = data[0]
+                ex_date = dividend.get('ex_dividend_date')
+                amount = dividend.get('cash_amount')
+
+                # Ověření, zda je datum ex-dividendy v budoucnosti
+                today = datetime.now().date()
+                ex_date_dt = datetime.strptime(ex_date, '%Y-%m-%d').date()
+                
+                # Pokud je v budoucnosti, vrátíme jako nadcházející
+                if ex_date_dt > today:
+                    print(f"Nadcházející dividenda: {amount} USD pro {ticker}, Ex-date: {ex_date}")
+                    return ex_date, amount
+                else:
+                    # Pokud je datum v minulosti, vrátíme poslední známou dividendu
+                    print(f"Poslední známá dividenda: {amount} USD pro {ticker}, Ex-date: {ex_date}")
+                    return ex_date, amount
+            else:
+                print(f"Žádné dividendy vrácené API pro {ticker}.")
+                return None, None
+        else:
+            print(f"Chyba při volání API Polygon pro {ticker}: {response.status_code}")
+            return None, None
+    except Exception as e:
+        print(f"Chyba při zpracování API pro {ticker}: {str(e)}")
+        return None, None
+    
+# Funkce, která zpracuje celé portfolio a zjistí nadcházející dividendy
+def get_upcoming_dividends_for_portfolio(data):
+    unique_isins = data['ISIN'].unique()
+    upcoming_dividends = []
+
+    for isin in unique_isins:
+        ticker = get_ticker_from_isin(isin)
+        if not ticker:
+            print(f"Ticker pro ISIN {isin} nebyl nalezen.")
+            continue
+
+        print(f"Zpracovávám ticker: {ticker}")
+        ex_date, amount = get_upcoming_dividend(ticker)
+        if ex_date and amount:
+            print(f"Nalezená nadcházející dividenda: {ex_date}, {amount}")
+            upcoming_dividends.append({
+                'ticker': ticker,
+                'ex_date': ex_date,
+                'amount': amount
+            })
+        else:
+            print(f"Žádné nadcházející dividendy pro {ticker}.")
+
+    print(f"Nadcházející dividendy pro portfolio: {upcoming_dividends}")
+    return upcoming_dividends
+
+@portfolio_bp.route('/portfolio/upcoming_dividends/<int:portfolio_id>', methods=['GET'])
+@login_required
+def upcoming_dividends(portfolio_id):
+    portfolio = Portfolio.query.get_or_404(portfolio_id)
+
+    if portfolio.user != current_user:
+        flash('Nemáte oprávnění k zobrazení tohoto portfolia.', 'error')
+        return redirect(url_for('portfolio.upload'))
+
+    csv_data = BytesIO(portfolio.data)
+    try:
+        # Načteme CSV data portfolia
+        data = pd.read_csv(csv_data, encoding='utf-8')
+        data['Datum'] = pd.to_datetime(data['Datum'], format='%d-%m-%Y', errors='coerce').dt.strftime('%Y-%m-%d')
+    except pd.errors.EmptyDataError:
+        flash('Soubor je prázdný nebo neplatný.', 'error')
+        return redirect(url_for('portfolio.upload'))
+
+    # Získání nadcházejících dividend pro portfolio
+    upcoming_dividends = get_upcoming_dividends_for_portfolio(data)
+
+    # Debug: Vypíše nadcházející dividendy, které jsou předávány šabloně
+    print(f"Nadcházející dividendy předané šabloně: {upcoming_dividends}")
+
+    return render_template('upcoming_dividends.html', portfolio=portfolio, upcoming_dividends=upcoming_dividends)
+
+import requests
+import xml.etree.ElementTree as ET
+import pandas as pd
+
+# Funkce pro získání aktuálního směnného kurzu pomocí ECB API
+def get_current_fx_rate(from_currency):
+    # ECB API poskytuje směnné kurzy pouze proti EUR
+    if from_currency == 'EUR':
+        return 1.0  # Pokud je měna EUR, vrátíme kurz 1:1
+    
+    # API ECB vrací XML s denními směnnými kurzy proti EUR
+    url = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml"
+    response = requests.get(url)
+    
+    if response.status_code == 200:
+        tree = ET.ElementTree(ET.fromstring(response.content))
+        root = tree.getroot()
+
+        # Hledáme směnný kurz k euru pro danou měnu
+        namespaces = {'ns': 'http://www.ecb.int/vocabulary/2002-08-01/eurofxref'}
+        for cube in root.findall(".//ns:Cube[@currency]", namespaces):
+            if cube.attrib['currency'] == from_currency:
+                return float(cube.attrib['rate'])
+        print(f"Chyba: Nenalezen směnný kurz pro {from_currency}.")
+        return None
+    else:
+        print(f"Chyba při získávání měnového kurzu: {response.status_code}")
+        return None
+
+
+# Výpočet profitu/ztráty na základě původní a aktuální hodnoty transakce (v CZK)
+def calculate_forex_profit_loss(data):
+    forex_results = []
+    total_forex_impact = 0  # Celkový měnový dopad v CZK
+
+    # Získání směnného kurzu EUR/CZK pro přepočet výsledků do CZK
+    eur_to_czk_rate = get_current_fx_rate('CZK')
+    if eur_to_czk_rate is None:
+        print("Chyba: Nelze získat směnný kurz EUR/CZK.")
+        return forex_results, total_forex_impact
+
+    # Filtrujeme pozice, které nejsou uzavřené (které mají stále nějaký počet akcií)
+    open_positions = data[data['Počet'] > 0]
+
+    for _, row in open_positions.iterrows():
+        domestic_value = abs(row.get('Hodnota v domácí měně', 0))  # Hodnota v domácí měně
+        original_fx_rate = row.get('Směnný kurz', None)  # Původní směnný kurz
+        currency = row.get('Unnamed: 8', 'EUR')  # Měna z Unnamed: 8 (v případě chybějícího sloupce defaultně EUR)
+
+        if pd.isna(domestic_value) or pd.isna(original_fx_rate):
+            print(f"Skipping row due to missing data: {row}")
+            continue
+
+        if currency == 'EUR':
+            # Pro měny v EUR není potřeba výpočet forex dopadu
+            print(f"Skipping row as currency is EUR: {row}")
+            continue
+
+        # Získání aktuálního směnného kurzu pro měnu do EUR
+        current_fx_rate = get_current_fx_rate(currency)
+
+        # Přidáme ladicí výpis pro zobrazení směnných kurzů
+        print(f"Currency: {currency}, Original FX Rate: {original_fx_rate}, Current FX Rate: {current_fx_rate}")
+
+        if current_fx_rate:
+            # Původní hodnota v EUR
+            original_eur_value = domestic_value / original_fx_rate
+
+            # Přepočet původní hodnoty v domácí měně na EUR pomocí aktuálního kurzu
+            current_value_in_domestic = original_eur_value * current_fx_rate
+
+            # Rozdíl mezi aktuální a původní hodnotou v domácí měně (profit/ztráta) v EUR
+            profit_or_loss_eur = current_value_in_domestic - domestic_value
+
+            # Přepočet profitu nebo ztráty z EUR do CZK pomocí aktuálního kurzu EUR/CZK
+            profit_or_loss_czk = profit_or_loss_eur * eur_to_czk_rate
+            total_forex_impact += profit_or_loss_czk
+
+            # Uložení výsledků pro každou transakci v CZK
+            forex_results.append({
+                'Datum': row['Datum'],
+                'Měna': currency,
+                'Původní hodnota': domestic_value,
+                'Původní kurz': original_fx_rate,
+                'Aktuální kurz': current_fx_rate,
+                'Původní hodnota v EUR': original_eur_value,
+                'Aktuální hodnota v domácí měně': current_value_in_domestic,
+                'Profit/Ztráta (CZK)': round(profit_or_loss_czk, 2)
+            })
+
+            # Přidáme ladicí výpis pro zobrazení zisku/ztráty v CZK
+            print(f"Transaction profit/loss for {currency} (CZK): {round(profit_or_loss_czk, 2)}")
+
+    # Výpis celkového forex dopadu v CZK
+    print(f"Total Forex Impact (CZK): {round(total_forex_impact, 2)}")
+
+    return forex_results, round(total_forex_impact, 2)
+
 @portfolio_bp.route('/delete_portfolio/<int:portfolio_id>', methods=['POST'])
 @login_required
 def delete_portfolio(portfolio_id):
+    print(f"Request to delete portfolio {portfolio_id}")
     portfolio_to_delete = Portfolio.query.get_or_404(portfolio_id)
 
     if portfolio_to_delete.owner != current_user:
         flash('Nemáte oprávnění smazat toto portfolio.', 'error')
         return redirect(url_for('portfolio.upload'))
 
-    db.session.delete(portfolio_to_delete)
-    db.session.commit()
-    flash('Portfolio bylo úspěšně smazáno.', 'success')
+    try:
+        db.session.delete(portfolio_to_delete)
+        db.session.commit()
+        flash('Portfolio bylo úspěšně smazáno.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Chyba při mazání portfolia: {str(e)}', 'error')
+
     return redirect(url_for('portfolio.upload'))
