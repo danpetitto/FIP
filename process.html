@@ -18,29 +18,56 @@
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Realizovaný zisk:</strong> 
                             <span>{{ results.realized_profit }}</span>
+                            <span>({{ results.realized_profit_percentage }} )</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Nerealizovaný zisk:</strong> 
                             <span>{{ results.unrealized_profit }}</span>
+                            <span>({{ results.unrealized_profit_percentage }} )</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Celková výše dividend:</strong> 
                             <span>{{ results.total_dividends }}</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
+                            <strong>Dividendový výnos:</strong> 
+                            <span>{{ results.dividend_yield }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <strong>Predikce dividend na 10 let:</strong> 
+                            <span>{{ results.dividend_prediction_10_years }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <strong>Daň z dividend:</strong> 
+                            <span>{{ results.tax_on_dividends }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
                             <strong>Poplatky:</strong> 
                             <span>{{ results.total_fees }}</span>
+                            <span>({{ results.fees_percentage }} )</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Investovaná částka:</strong> 
-                            <span>{{ results.invested }} €</span>
+                            <span>{{ results.invested }} </span>
+                        </li>
+                        <!-- Sekce měnového dopadu -->
+                        <li class="list-group-item d-flex justify-content-between bg-light">
+                            <strong>Měnový dopad (celkem v CZK):</strong> 
+                            <span>{{ results.forex_impact_czk }}</span>
+                            <span>({{ results.forex_impact_percentage }} )</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between bg-light">
+                            <strong>Měnový dopad (celkem v EUR):</strong> 
+                            <span>{{ results.forex_impact_eur }}</span>
                         </li>
                     </ul>
                 </div>
-                
-                <!-- Odkaz na detaily investic -->
+
+                <!-- Odkazy na další stránky -->
                 <div class="text-center mb-4">
-                    <a href="{{ url_for('portfolio.investment_details') }}" class="btn btn-primary">Zobrazit detaily investic</a>
+                    <a href="{{ url_for('portfolio.investment_details', portfolio_id=portfolio.id) }}" class="btn btn-primary">Zobrazit detaily investic</a>
+                    <a href="{{ url_for('portfolio.dividend_calendar', portfolio_id=portfolio.id) }}" class="btn btn-secondary">Dividendový kalendář</a>
+                    <a href="{{ url_for('portfolio.trades', portfolio_id=portfolio.id) }}" class="btn btn-info">Historie obchodů</a>
                 </div>                
             </div>
         </div>
@@ -92,7 +119,6 @@
         <div id="sectorChartLabels" style="display:none;">{{ stock_labels | default([]) | tojson }}</div>
         <div id="sectorChartData" style="display:none;">{{ stock_percentages | default([]) | tojson }}</div>
 
-        <!-- Nové prvky pro jednotlivé pozice -->
         <div id="positionChartLabels" style="display:none;">{{ position_labels | default([]) | tojson }}</div>
         <div id="positionChartData" style="display:none;">{{ position_percentages | default([]) | tojson }}</div>
     </div>
@@ -106,7 +132,6 @@
             var sectorLabels = JSON.parse(document.getElementById('sectorChartLabels').textContent || '[]');
             var sectorData = JSON.parse(document.getElementById('sectorChartData').textContent || '[]');
 
-            // Definice barev
             var backgroundColors = [
                 'rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)', 'rgba(255, 206, 86, 0.2)', 
                 'rgba(75, 192, 192, 0.2)', 'rgba(153, 102, 255, 0.2)', 'rgba(255, 159, 64, 0.2)',
@@ -121,7 +146,6 @@
                 'rgba(173, 216, 230, 1)'
             ];
 
-            // Vykreslení grafu sektorů
             var sectorInvestmentChart = new Chart(ctxSector, {
                 type: 'pie',
                 data: {
@@ -141,7 +165,6 @@
             var positionLabels = JSON.parse(document.getElementById('positionChartLabels').textContent || '[]');
             var positionData = JSON.parse(document.getElementById('positionChartData').textContent || '[]');
 
-            // Vykreslení grafu jednotlivých akcií
             var positionInvestmentChart = new Chart(ctxPosition, {
                 type: 'pie',
                 data: {
