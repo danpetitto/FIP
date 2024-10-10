@@ -43,5 +43,3 @@ class Trade(db.Model):
     pocet = db.Column(db.Integer, nullable=False)  # nový sloupec pro počet
     hodnota = db.Column(db.Float, nullable=False)
     poplatky = db.Column(db.Float, nullable=False, default=0.0)
-
-
