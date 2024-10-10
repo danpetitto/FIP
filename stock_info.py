@@ -7,16 +7,19 @@ def get_delayed_price_polygon(ticker):
     api_key = "your_polygon_api_key"  # Musíš mít platný Polygon API klíč
     url = f"https://api.polygon.io/v2/aggs/ticker/{ticker}/prev?adjusted=true&apiKey={api_key}"
     
-    response = requests.get(url)
-    
-    if response.status_code == 200:
-        data = response.json()
-        if data.get('results'):
-            return data['results'][0]['c']  # 'c' je cena uzavření
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('results'):
+                return data['results'][0]['c']  # 'c' je cena uzavření
+    except Exception as e:
+        print(f"Chyba při získávání ceny pro {ticker}: {e}")
     return None
 
 # Funkce pro získání informací o akciích podle ISIN
-def get_stock_info(isin):
+def get_stock_info(data, isin):  
+    # Získání tickeru na základě ISIN
     ticker = get_ticker_from_isin(isin)
     if not ticker:
         return {
@@ -27,7 +30,7 @@ def get_stock_info(isin):
             'Profit': 'Neznámý'
         }
 
-    # Najdeme odpovídající řádek v datasetu
+    # Vyfiltrování dat pro konkrétní ISIN
     stock_data = data[data['ISIN'] == isin]
     if stock_data.empty:
         return {
@@ -38,23 +41,26 @@ def get_stock_info(isin):
             'Profit': 'Neznámý'
         }
 
-    # Výpočet hodnot
-    pocet_akcii = stock_data['Počet'].values[0]
-    kupni_cena = stock_data['Cena'].values[0]
-    aktualni_cena = get_delayed_price_polygon(ticker)
+    # Výpočet počtu akcií a kupní ceny
+    pocet_akcii = stock_data['Počet'].sum()  # Sčítáme počet akcií pro všechny řádky daného ISIN
+    kupni_cena = stock_data['Cena'].mean()  # Průměrná kupní cena
 
-    if not aktualni_cena:
+    # Získání aktuální ceny akcie
+    aktualni_cena = get_delayed_price_polygon(ticker)
+    if aktualni_cena is None:
         return {
             'Symbol': ticker,
-            'Kupní hodnota': kupni_cena,
+            'Kupní hodnota': round(kupni_cena * pocet_akcii, 2),
             'Aktuální hodnota': 'Neznámá',
             'Počet akcií': pocet_akcii,
             'Profit': 'Neznámý'
         }
 
+    # Výpočet hodnoty pozice a profitu
     aktualni_hodnota = aktualni_cena * pocet_akcii
     profit = aktualni_hodnota - (kupni_cena * pocet_akcii)
 
+    # Návrat strukturovaných dat o akcii
     return {
         'Symbol': ticker,
         'Kupní hodnota': round(kupni_cena * pocet_akcii, 2),
