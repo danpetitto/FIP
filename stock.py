@@ -147,7 +147,6 @@ def get_polygon_dividend_data(ticker):
             'quarterly_yield': 'Data nejsou dostupná',
             'dividend_yield': 'Data nejsou dostupná'
         }
-
 # Trasa pro zobrazení detailů akcie
 @stock_bp.route('/stocks/<ticker>', methods=['GET'])
 def get_stock(ticker):
