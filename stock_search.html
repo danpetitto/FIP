@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Vyhledávání akcií{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Vyhledávání akcií</h1>
+    <form id="stock-search-form" method="GET" action="/stock/search_stocks">
+        <div class="form-group">
+            <label for="query">Vyhledat akcii podle názvu nebo symbolu:</label>
+            <input type="text" id="query" name="query" class="form-control" placeholder="Název akcie nebo symbol" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Vyhledat</button>
+    </form>
+
+    <div id="search-results" class="mt-4"></div>
+</div>
+
+<script>
+    document.getElementById('stock-search-form').onsubmit = async function(event) {
+        event.preventDefault();
+
+        const query = document.getElementById('query').value;
+
+        if (!query) {
+            alert('Prosím, zadejte název nebo symbol akcie.');
+            return;
+        }
+
+        const response = await fetch(`/stock/search_stocks?query=${query}`);
+        const results = await response.json();
+
+        const resultsDiv = document.getElementById('search-results');
+        resultsDiv.innerHTML = '';
+
+        if (results.error) {
+            resultsDiv.innerHTML = `<p>${results.error}</p>`;
+        } else if (results.length === 0) {
+            resultsDiv.innerHTML = '<p>Nebyly nalezeny žádné výsledky.</p>';
+        } else {
+            const list = document.createElement('ul');
+            results.forEach(stock => {
+                const item = document.createElement('li');
+                item.innerHTML = `<a href="/stock/stocks/${stock['ticker']}">${stock['name']}</a>`;
+                list.appendChild(item);
+            });
+            resultsDiv.appendChild(list);
+        }
+    };
+</script>
+{% endblock %}
