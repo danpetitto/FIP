@@ -3,6 +3,7 @@ import requests
 from flask import Blueprint, request, jsonify, render_template
 import logging
 import yfinance as yf  # Přidání yfinance pro získání P/E a EPS poměru
+from datetime import datetime, timedelta
 
 # Zde vložte přímo svůj API klíč pro Polygon API
 POLYGON_API_KEY = os.getenv('POLYGON_API_KEY')
@@ -268,3 +269,19 @@ def get_polygon_dividend_data(ticker):
             'annual_dividend_per_share': 'Data nejsou dostupná',
             'dividend_yield': 'Data nejsou dostupná'
         }
+    
+@stock_bp.route('/stock_chart/<ticker>', methods=['GET'])
+def stock_chart_data(ticker):
+    period = request.args.get('period', '1mo')  # Defaultně 1 měsíc
+    try:
+        stock = yf.Ticker(ticker)
+        data = stock.history(period=period)
+        
+        dates = data.index.strftime('%Y-%m-%d').tolist()  # Datum jako seznam řetězců
+        prices = data['Close'].tolist()  # Uzavírací ceny
+        
+        return jsonify({'dates': dates, 'prices': prices})
+    
+    except Exception as e:
+        logging.error(f"Chyba při načítání dat pro graf: {e}")
+        return jsonify({'error': 'Nepodařilo se načíst data pro graf'}), 500
