@@ -82,10 +82,35 @@ def get_stock(ticker):
         # Získání zpožděné ceny
         delayed_price = get_polygon_delayed_price(ticker)
 
-        # Získání P/E poměru a EPS pomocí yfinance
+        # Získání P/E poměru, EPS, marží, EV/EBITDA, EBITDA a ROE pomocí yfinance
         stock = yf.Ticker(ticker)
         pe_ratio = stock.info.get('trailingPE', 'Data nejsou dostupná')
         eps = stock.info.get('trailingEps', 'Data nejsou dostupná')
+        ev_to_ebitda = stock.info.get('enterpriseToEbitda', 'Data nejsou dostupná')
+        ebitda = stock.info.get('ebitda', 'Data nejsou dostupná')
+        roe = stock.info.get('returnOnEquity', 'Data nejsou dostupná')
+
+        # Získání marží
+        gross_margin = stock.info.get('grossMargins', 'Data nejsou dostupná')
+        operating_margin = stock.info.get('operatingMargins', 'Data nejsou dostupná')
+        net_margin = stock.info.get('profitMargins', 'Data nejsou dostupná')
+
+        # Formátování marží a dalších ukazatelů (pokud jsou dostupné)
+        if gross_margin != 'Data nejsou dostupná':
+            gross_margin = f"{gross_margin * 100:.2f} %"
+        if operating_margin != 'Data nejsou dostupná':
+            operating_margin = f"{operating_margin * 100:.2f} %"
+        if net_margin != 'Data nejsou dostupná':
+            net_margin = f"{net_margin * 100:.2f} %"
+        if ev_to_ebitda != 'Data nejsou dostupná':
+            ev_to_ebitda = f"{ev_to_ebitda:.2f}"
+        if ebitda != 'Data nejsou dostupná':
+            ebitda = f"{ebitda / 1e9:.2f} B USD"  # Převedení EBITDA na miliardy USD
+        if roe != 'Data nejsou dostupná':
+            roe = f"{roe * 100:.2f} %"
+
+        # Získání počtu let vyplácení dividend pomocí yfinance
+        payout_years = get_dividend_payout_years(ticker)
 
         # Kontrola a extrakce dat z API odpovědi
         stock_name = stock_data['results'].get('name', 'Název není dostupný')
@@ -95,15 +120,22 @@ def get_stock(ticker):
         if market_cap == 'Data nejsou dostupná':
             logging.debug(f"Tržní kapitalizace pro {ticker} není dostupná.")
 
-        # Kombinování všech získaných dat, včetně P/E poměru a EPS
+        # Kombinování všech získaných dat, včetně P/E poměru, EPS, a dalších finančních ukazatelů
         stock_data_combined = {
             'name': stock_name,
             'market_cap': market_cap,
             'current_price': delayed_price,
             'pe_ratio': pe_ratio,  # P/E poměr
             'eps': eps,  # EPS
+            'gross_margin': gross_margin,  # Hrubá marže
+            'operating_margin': operating_margin,  # Provozní marže
+            'net_margin': net_margin,  # Čistá marže
+            'ev_to_ebitda': ev_to_ebitda,  # EV/EBITDA
+            'ebitda': ebitda,  # EBITDA
+            'roe': roe,  # ROE
             'annual_dividend_per_share': dividend_data.get('annual_dividend_per_share', 'Data nejsou dostupná'),  # Roční dividenda
-            'dividend_yield': dividend_data.get('dividend_yield', 'Data nejsou dostupná')  # Roční dividendový výnos (%)
+            'dividend_yield': dividend_data.get('dividend_yield', 'Data nejsou dostupná'),  # Roční dividendový výnos
+            'dividend_payout_years': payout_years  # Počet let vyplácení dividend
         }
 
         # Renderování šablony s daty
@@ -122,6 +154,30 @@ def get_stock(ticker):
     except Exception as err:
         logging.error(f'Něco se pokazilo: {err}')
         return render_template('stocks.html', error=f'Něco se pokazilo: {err}', ticker=ticker)
+
+# Funkce pro získání počtu let výplaty dividend z yfinance
+def get_dividend_payout_years(ticker):
+    try:
+        stock = yf.Ticker(ticker)
+
+        # Získání historických dividend
+        dividend_history = stock.dividends
+
+        # Kontrola, zda jsou dostupná data o dividendách
+        if dividend_history.empty:
+            return 'Data nejsou dostupná'
+
+        # Získání prvního a posledního data výplaty dividendy
+        first_dividend_date = dividend_history.index.min()
+        last_dividend_date = dividend_history.index.max()
+
+        # Výpočet rozdílu v letech mezi první a poslední dividendou
+        payout_years = (last_dividend_date - first_dividend_date).days // 365
+
+        return f"{payout_years} let" if payout_years > 0 else "Méně než 1 rok"
+    except Exception as e:
+        logging.error(f"Chyba při získávání počtu let výplaty dividend z yfinance pro {ticker}: {e}")
+        return 'Data nejsou dostupná'
 
 # URL pro získání zpožděné ceny z Polygon API
 API_DELAYED_PRICE_URL = 'https://api.polygon.io/v2/aggs/ticker/{ticker}/prev'
@@ -166,6 +222,8 @@ def get_polygon_dividend_data(ticker):
     try:
         # Volání Polygon API pro získání dat o dividendách
         response = requests.get(url, params=params)
+
+        # Zpracování odpovědi, pokud nejsou žádné chyby
         response.raise_for_status()
         dividend_data = response.json()
 
@@ -184,7 +242,7 @@ def get_polygon_dividend_data(ticker):
             else:
                 annual_dividend_per_share = 'Data nejsou dostupná'
 
-            # Výpočet ročního dividendového výnosu (%)
+            # Výpočet ročního dividendového výnosu v procentech
             if current_price != 'Data nejsou dostupná' and annual_dividend_per_share != 'Data nejsou dostupná':
                 try:
                     dividend_yield = (float(annual_dividend_per_share) / float(current_price)) * 100
@@ -210,4 +268,3 @@ def get_polygon_dividend_data(ticker):
             'annual_dividend_per_share': 'Data nejsou dostupná',
             'dividend_yield': 'Data nejsou dostupná'
         }
-
