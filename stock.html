@@ -13,56 +13,171 @@
     {% else %}
         <!-- Stock Information Card -->
         <div class="card shadow-sm mb-4 rounded-lg border-0">
-            <div class="card-header bg-gradient-primary text-white rounded-top">
+            <div class="card-header bg-gradient-primary text-white rounded-top py-3">
                 <h3 class="mb-0">{{ stock.name }}</h3>
             </div>
             <div class="card-body bg-light rounded-bottom">
                 <!-- General Stock Information -->
                 <div class="row">
-                    <div class="col-md-6">
-                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg">
-                            <strong>Aktuální cena:</strong> 
-                            <span class="text-success font-weight-bold">{{ stock.current_price }} USD</span>
+                    <div class="col-md-4">
+                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
+                            <strong>Aktuální cena:</strong>
+                            <span class="text-success d-block display-6 font-weight-bold">{{ stock.current_price }} USD</span>
                         </div>
                     </div>
-                    <div class="col-md-6">
-                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg">
-                            <strong>Tržní kapitalizace:</strong> 
+                    <div class="col-md-4">
+                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
+                            <strong>Tržní kapitalizace:</strong>
                             {% if stock.market_cap == 'Data nejsou dostupná' %}
-                                <span class="text-warning">Data nejsou dostupná</span>
+                                <span class="text-warning d-block">Data nejsou dostupná</span>
                             {% else %}
-                                <span class="text-primary font-weight-bold">{{ stock.market_cap }} USD</span>
+                                <span class="text-primary d-block display-6 font-weight-bold">{{ stock.market_cap }} USD</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
+                            <strong>P/E poměr:</strong>
+                            {% if stock.pe_ratio == 'Data nejsou dostupná' %}
+                                <span class="text-warning d-block">Data nejsou dostupná</span>
+                            {% else %}
+                                <span class="text-info d-block display-6 font-weight-bold">{{ stock.pe_ratio }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- EPS (Earnings Per Share) Block -->
+                <div class="row">
+                    <div class="col-md-4 offset-md-4">
+                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
+                            <strong>EPS (Zisk na akcii):</strong>
+                            {% if stock.eps == 'Data nejsou dostupná' %}
+                                <span class="text-warning d-block">Data nejsou dostupná</span>
+                            {% else %}
+                                <span class="text-info d-block display-6 font-weight-bold">{{ stock.eps }} USD</span>
                             {% endif %}
                         </div>
                     </div>
                 </div>
 
                 <!-- Dividend Information Block -->
-                <h4 class="mt-4 text-secondary">Informace o dividendách</h4>
+                <h4 class="mt-4 text-secondary text-center">Informace o dividendách</h4>
                 <div class="row">
                     <div class="col-md-6">
-                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg">
-                            <strong>Roční dividendový výnos:</strong> 
+                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
+                            <strong>Roční dividendový výnos (%):</strong>
                             {% if stock.dividend_yield == 'Data nejsou dostupná' %}
-                                <span class="text-warning">Výnos není dostupný</span>
+                                <span class="text-warning d-block">Výnos není dostupný</span>
                             {% else %}
-                                <span class="text-success font-weight-bold">{{ stock.dividend_yield }}</span>
+                                <span class="text-success d-block display-6 font-weight-bold">{{ stock.dividend_yield }}</span>
                             {% endif %}
                         </div>
                     </div>
                     <div class="col-md-6">
-                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg">
-                            <strong>Čtvrtletní dividenda na akcii (USD):</strong> 
-                            {% if stock.quarterly_dividend_per_share == 'Data nejsou dostupná' %}
-                                <span class="text-warning">Data nejsou dostupná</span>
+                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
+                            <strong>Roční dividenda na akcii (USD):</strong>
+                            {% if stock.annual_dividend_per_share == 'Data nejsou dostupná' %}
+                                <span class="text-warning d-block">Data nejsou dostupná</span>
                             {% else %}
-                                <span class="text-primary font-weight-bold">{{ stock.quarterly_dividend_per_share }}</span>
+                                <span class="text-primary d-block display-6 font-weight-bold">{{ stock.annual_dividend_per_share }}</span>
                             {% endif %}
                         </div>
                     </div>
                 </div>
+
+                <!-- Dividend Payout Years Block -->
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
+                            <strong>Počet let výplaty dividend:</strong>
+                            {% if stock.dividend_payout_years == 'Data nejsou dostupná' %}
+                                <span class="text-warning d-block">Data nejsou dostupná</span>
+                            {% else %}
+                                <span class="text-info d-block display-6 font-weight-bold">{{ stock.dividend_payout_years }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Financial Ratios Block -->
+                <h4 class="mt-4 text-secondary text-center">Finanční ukazatele</h4>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
+                            <strong>EV/EBITDA:</strong>
+                            {% if stock.ev_to_ebitda == 'Data nejsou dostupná' %}
+                                <span class="text-warning d-block">Data nejsou dostupná</span>
+                            {% else %}
+                                <span class="text-info d-block display-6 font-weight-bold">{{ stock.ev_to_ebitda }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
+                            <strong>EBITDA:</strong>
+                            {% if stock.ebitda == 'Data nejsou dostupná' %}
+                                <span class="text-warning d-block">Data nejsou dostupná</span>
+                            {% else %}
+                                <span class="text-primary d-block display-6 font-weight-bold">{{ stock.ebitda }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
+                            <strong>ROE (Return on Equity):</strong>
+                            {% if stock.roe == 'Data nejsou dostupná' %}
+                                <span class="text-warning d-block">Data nejsou dostupná</span>
+                            {% else %}
+                                <span class="text-info d-block display-6 font-weight-bold">{{ stock.roe }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+<!-- Stock Chart Block -->
+<h4 class="mt-4 text-secondary text-center">Graf ceny akcie</h4>
+<div class="row">
+    <div class="col-md-12 text-center">
+        <label for="time-period-select" class="font-weight-bold">Zobrazit pohyby cen za:</label>
+        <select id="time-period-select" class="form-control d-inline-block w-auto mb-3">
+            <option value="1mo">1 měsíc</option>
+            <option value="3mo">3 měsíce</option>
+            <option value="6mo">6 měsíců</option>
+            <option value="1y">1 rok</option>
+            <option value="2y">2 roky</option>
+            <option value="5y">5 let</option>
+            <option value="max">Maximální období</option>
+        </select>
+
+        <!-- Plátno pro graf -->
+        <canvas id="stockChart" style="max-width: 100%; height: auto;"></canvas>
+
+        <!-- Tlačítko pro zvětšení grafu -->
+        <button type="button" class="btn btn-primary mt-3" id="enlargeChartButton" data-toggle="modal" data-target="#chartModal">Zvětšit graf</button>
+
+        <!-- Modal pro zvětšený graf -->
+        <div class="modal fade" id="chartModal" tabindex="-1" role="dialog" aria-labelledby="chartModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="chartModalLabel">Zvětšený graf</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Zavřít">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <!-- Plátno pro zvětšený graf -->
+                        <canvas id="enlargedStockChart"></canvas>
+                    </div>
+                </div>
             </div>
         </div>
-    {% endif %}
+    </div>
 </div>
+     {% endif %}
+<!-- Soubory CSS a JS -->
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='stock.js') }}"></script>
 {% endblock %}
