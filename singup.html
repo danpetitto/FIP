@@ -1,27 +1,16 @@
 {% extends 'base.html' %}
 
-{% block title %}Přihlášení{% endblock %}
+{% block title %}Registrace{% endblock %}
 
 {% block content %}
     <div class="row justify-content-center">
         <div class="col-md-6">
-            <h2 class="text-center">Přihlášení</h2>
-
-            <!-- Zobrazení flash zpráv -->
-            {% with messages = get_flashed_messages(with_categories=true) %}
-              {% if messages %}
-                <div class="alert alert-dismissible">
-                  {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">
-                        {{ message }}
-                    </div>
-                  {% endfor %}
+            <h2 class="text-center">Registrace</h2>
+            <form method="POST" action="/auth/signup">
+                <div class="form-group">
+                    <label for="username">Uživatelské jméno</label>
+                    <input type="text" class="form-control" id="username" name="username" required>
                 </div>
-              {% endif %}
-            {% endwith %}
-
-            <!-- Formulář pro přihlášení -->
-            <form method="POST" action="{{ url_for('auth.login') }}">
                 <div class="form-group">
                     <label for="email">E-mail</label>
                     <input type="email" class="form-control" id="email" name="email" required>
@@ -30,14 +19,10 @@
                     <label for="password">Heslo</label>
                     <input type="password" class="form-control" id="password" name="password" required>
                 </div>
-                <button type="submit" class="btn btn-primary btn-block">Přihlásit se</button>
+                <button type="submit" class="btn btn-primary btn-block">Registrovat</button>
             </form>
-
-            <!-- Odkaz na zapomenuté heslo -->
-            <div class="text-center mt-3">
-                <a href="{{ url_for('auth.forgot_password') }}">Zapomněli jste své heslo?</a>
-            </div>
         </div>
     </div>
 {% endblock %}
+
 
