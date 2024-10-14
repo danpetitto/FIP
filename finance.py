@@ -4,6 +4,8 @@ import pandas as pd
 from polygon import RESTClient
 from dotenv import load_dotenv
 import time
+import schedule
+import datetime
 
 # Načtení proměnných z .env souboru
 load_dotenv()
