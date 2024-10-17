@@ -4,7 +4,7 @@ from models import Portfolio, db
 from finance import (
     add_current_prices, calculate_portfolio_value, calculate_realized_profit,
     calculate_unrealized_profit, calculate_invested_amount, calculate_dividend_cash,
-    calculate_fees
+    calculate_fees, get_czech_inflation_2024, calculate_portfolio_with_inflation
 )
 from portfolio_analysis import (
     get_ticker_from_isin, get_delayed_price_polygon, get_sector_from_ticker
@@ -187,7 +187,7 @@ def select_portfolio(portfolio_id):
 
     # Výpočty pro portfolio
     tickers_prices, portfolio_value, invested_amount, investment_duration, avg_monthly_investment, stock_info_list, position_percentages, position_labels = calculate_calculate_dividend_cash(data)
-    
+
     # Výpočet měnového dopadu (forex impact)
     forex_results, total_forex_impact_czk = calculate_forex_profit_loss(data)
 
@@ -197,20 +197,28 @@ def select_portfolio(portfolio_id):
     # Výpočet realizovaného a nerealizovaného zisku
     realized_profit = calculate_realized_profit(data)
     unrealized_profit = calculate_unrealized_profit(portfolio_value, invested_amount)
-    
+
     # Výpočet poplatků
     total_fees = calculate_fees(data)
-    
+
     # Výpočet procentuálních hodnot
     unrealized_profit_percentage = calculate_unrealized_profit_percentage(unrealized_profit, portfolio_value)
     realized_profit_percentage = calculate_realized_profit_percentage(realized_profit, portfolio_value)
     fees_percentage = calculate_fees_percentage(total_fees, portfolio_value)
     forex_impact_percentage = calculate_forex_impact_percentage(total_forex_impact_czk, portfolio_value)
 
+    # Získání pevně definované inflace pro Českou republiku pro rok 2024
+    inflation_rate = get_czech_inflation_2024()  # Funkce pro získání pevné inflace (2.8 %)
+
+    # Výpočet hodnoty portfolia po inflaci
+    portfolio_with_inflation = calculate_portfolio_with_inflation(portfolio_value, inflation_rate)
+
     return render_template(
         'process.html',
         results={
             'portfolio_value': f"{round(portfolio_value, 2)} €",
+            'portfolio_with_inflation': f"{round(portfolio_with_inflation, 2)} €",
+            'inflation_rate': f"{inflation_rate if inflation_rate else 'Neznámá'} %",  # Zobrazení aktuální inflace
             'realized_profit': f"{round(realized_profit, 2)} €",
             'realized_profit_percentage': f"{realized_profit_percentage} %",
             'unrealized_profit': f"{round(unrealized_profit, 2)} €",
@@ -235,6 +243,7 @@ def select_portfolio(portfolio_id):
         stock_info_list=stock_info_list,
         investment_duration=investment_duration
     )
+
 
 # Route pro zobrazení detailů investic
 @portfolio_bp.route('/investment_details', methods=['GET'])
