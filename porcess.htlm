@@ -13,7 +13,15 @@
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Hodnota portfolia:</strong> 
-                            <span>{{ results.portfolio_value }}</span>
+                            <span id="portfolio_value">{{ results.portfolio_value }} €</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <strong>Hodnota portfolia (po započtení inflace):</strong>
+                            <span id="portfolio_with_inflation">{{ results.portfolio_with_inflation }} €</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <strong>Inflace (aktuální):</strong>
+                            <span>{{ results.inflation_rate }} %</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Realizovaný zisk:</strong> 
@@ -82,6 +90,11 @@
             </div>
         </div>
 
+        <!-- Tlačítko pro přepínání inflace -->
+        <div class="text-center mb-4">
+            <button class="btn btn-primary" onclick="toggleInflation()">Přepnout inflaci</button>
+        </div>
+
         <!-- Zobrazení grafu rozložení investic do sektorů -->
         <div class="row justify-content-center mt-5">
             <div class="col-md-8">
@@ -129,8 +142,6 @@
         <!-- Skryté elementy pro předání dat do JS -->
         <div id="sectorChartLabels" style="display:none;">{{ stock_labels | default([]) | tojson }}</div>
         <div id="sectorChartData" style="display:none;">{{ stock_percentages | default([]) | tojson }}</div>
-
-        <!-- Nové prvky pro jednotlivé pozice -->
         <div id="positionChartLabels" style="display:none;">{{ position_labels | default([]) | tojson }}</div>
         <div id="positionChartData" style="display:none;">{{ position_percentages | default([]) | tojson }}</div>
     </div>
@@ -139,6 +150,26 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function() {
+            // Skrýt hodnotu s inflací při načtení stránky
+            document.getElementById('portfolio_with_inflation').style.display = 'none';
+
+            // Přepínání mezi hodnotou portfolia s inflací a bez
+            let showInflation = false;
+
+            window.toggleInflation = function() {
+                showInflation = !showInflation;
+                const portfolioValue = document.getElementById('portfolio_value');
+                const portfolioWithInflation = document.getElementById('portfolio_with_inflation');
+                
+                if (showInflation) {
+                    portfolioValue.style.display = 'none';
+                    portfolioWithInflation.style.display = 'block';
+                } else {
+                    portfolioValue.style.display = 'block';
+                    portfolioWithInflation.style.display = 'none';
+                }
+            }
+
             // Graf sektorů
             var ctxSector = document.getElementById('sectorInvestmentChart').getContext('2d');
             var sectorLabels = JSON.parse(document.getElementById('sectorChartLabels').textContent || '[]');
