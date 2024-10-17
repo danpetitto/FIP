@@ -339,3 +339,36 @@ def calculate_forex_impact_percentage(forex_impact, portfolio_value):
     if portfolio_value == 0:
         return 0  # Vyhneme se dělení nulou
     return round((forex_impact / portfolio_value) * 100, 2)
+
+# Funkce pro získání inflace pro rok 2024
+def get_czech_inflation_2024():
+    # Prozatím ručně zadáváme inflaci pro rok 2024, dokud není API spolehlivé
+    inflation_rate = 2.8  # Roční míra inflace v České republice pro rok 2024
+    print(f"Inflace za rok 2024: {inflation_rate}%")
+    return inflation_rate
+
+# Funkce pro výpočet hodnoty portfolia po započtení inflace
+def calculate_portfolio_with_inflation(portfolio_value, inflation_rate):
+    if inflation_rate is None:
+        print("Inflace nebyla dostupná, vracíme původní hodnotu portfolia.")
+        return portfolio_value  # Pokud nemáme inflaci, vrátíme původní hodnotu
+    
+    # Inflaci převedeme na procentuální vyjádření a upravíme hodnotu portfolia
+    inflation_adjustment = portfolio_value * (inflation_rate / 100)
+    portfolio_with_inflation = portfolio_value - inflation_adjustment
+    
+    print(f"Original Portfolio Value: {portfolio_value} €")
+    print(f"Inflation Rate Applied: {inflation_rate} %")
+    print(f"Portfolio Value after Inflation Adjustment: {portfolio_with_inflation} €")  # Debug výpis
+    
+    return portfolio_with_inflation
+
+# Příklad použití
+portfolio_value = 10000  # Příklad hodnoty portfolia
+inflation_rate = get_czech_inflation_2024()  # Použijeme funkci pro inflaci 2024
+
+if inflation_rate is not None:
+    portfolio_with_inflation = calculate_portfolio_with_inflation(portfolio_value, inflation_rate)  # Spočítáme hodnotu portfolia po inflaci
+    print(f"Final Portfolio Value (adjusted for inflation): {portfolio_with_inflation} €")
+else:
+    print("Nepodařilo se získat aktuální inflaci.")
