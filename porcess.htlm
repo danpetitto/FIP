@@ -13,39 +13,56 @@
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Hodnota portfolia:</strong> 
-                            <span>{{ results.portfolio_value }} </span>
+                            <span>{{ results.portfolio_value }}</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Realizovaný zisk:</strong> 
-                            <span>{{ results.realized_profit }} </span>
+                            <span>{{ results.realized_profit }}</span>
+                            <span>({{ results.realized_profit_percentage }} )</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Nerealizovaný zisk:</strong> 
-                            <span>{{ results.unrealized_profit }} </span>
+                            <span>{{ results.unrealized_profit }}</span>
+                            <span>({{ results.unrealized_profit_percentage }} )</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Celková výše dividend:</strong> 
-                            <span>{{ results.total_dividends }} </span>
+                            <span>{{ results.total_dividends }}</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Dividendový výnos:</strong> 
-                            <span>{{ results.dividend_yield }} </span>
+                            <span>{{ results.dividend_yield }}</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Predikce dividend na 10 let:</strong> 
-                            <span>{{ results.dividend_prediction_10_years }} </span>
+                            <span>{{ results.dividend_prediction_10_years }}</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Daň z dividend:</strong> 
-                            <span>{{ results.tax_on_dividends }} </span>
+                            <span>{{ results.tax_on_dividends }}</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Poplatky:</strong> 
-                            <span>{{ results.total_fees }} </span>
+                            <span>{{ results.total_fees }}</span>
+                            <span>({{ results.fees_percentage }} )</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <strong>Délka investování:</strong> 
+                            <span>{{ results.investment_duration }}</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Investovaná částka:</strong> 
                             <span>{{ results.invested }} </span>
+                        </li>
+                        <!-- Sekce měnového dopadu -->
+                        <li class="list-group-item d-flex justify-content-between bg-light">
+                            <strong>Měnový dopad (celkem v CZK):</strong> 
+                            <span>{{ results.forex_impact_czk }}</span>
+                            <span>({{ results.forex_impact_percentage }} )</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between bg-light">
+                            <strong>Měnový dopad (celkem v EUR):</strong> 
+                            <span>{{ results.forex_impact_eur }}</span>
                         </li>
                     </ul>
                 </div>
