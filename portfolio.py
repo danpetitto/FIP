@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from flask_login import login_required, current_user
-from models import Portfolio, db
+from models import Portfolio, db, Trade
+from io import StringIO
 from finance import (
     add_current_prices, calculate_portfolio_value, calculate_realized_profit,
     calculate_unrealized_profit, calculate_invested_amount, calculate_dividend_cash,
@@ -139,6 +140,7 @@ def get_price_for_month(ticker, date):
     return price
 
 # Route pro nahrávání nového portfolia
+# Route pro nahrávání nového portfolia
 @portfolio_bp.route('/upload', methods=['GET', 'POST'])
 @login_required
 def upload():
@@ -169,6 +171,7 @@ def upload():
     user_portfolios = Portfolio.query.filter_by(user_id=current_user.id).all()
     return render_template('upload.html', portfolios=user_portfolios)
 
+#výběr portfolia
 @portfolio_bp.route('/select_portfolio/<int:portfolio_id>', methods=['GET'])
 @login_required
 def select_portfolio(portfolio_id):
