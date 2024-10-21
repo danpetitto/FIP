@@ -4,6 +4,9 @@ from flask_mail import Message
 from itsdangerous import URLSafeTimedSerializer
 from models import User, db
 from extensions import mail  # Importujeme mail z extensions.py
+from werkzeug.utils import secure_filename
+import os
+
 
 # Definice blueprintu pro autentizaci
 auth_bp = Blueprint('auth', __name__)
@@ -141,3 +144,78 @@ def verify_reset_token(token, expires_sec=1800):
     except:
         return None
     return User.query.filter_by(email=email).first()
+
+
+#PROFIL UŽIVATELE
+from flask import render_template, redirect, url_for, flash, request, current_app
+from flask_login import login_required, current_user
+import os
+from werkzeug.utils import secure_filename
+from datetime import datetime
+
+@auth_bp.route('/profile', methods=['GET', 'POST'])
+@login_required
+def profile():
+    user = current_user  # Získáme aktuálního uživatele
+
+    if request.method == 'POST':
+        username = request.form.get('username')
+        about = request.form.get('about')
+        profile_image = request.files.get('profile_image')
+        investor_type = request.form.get('investor_type')
+        investor_since = request.form.get('investor_since')
+        location = request.form.get('location')  # Nové pole pro místo bydliště
+        website = request.form.get('website')  # Nové pole pro webovou stránku
+        social_links = request.form.get('social_links')  # Nové pole pro sociální sítě
+
+        if username:
+            user.username = username
+        if about:
+            user.about = about
+        if investor_type:
+            user.investor_type = investor_type
+        if investor_since:
+            try:
+                user.investor_since = datetime.strptime(investor_since, '%Y').date()
+            except ValueError:
+                flash('Neplatný formát data pro "Investor od roku". Zadejte rok ve formátu YYYY.', 'error')
+        if location:
+            user.location = location
+        if website:
+            user.website = website
+        if social_links:
+            user.social_links = social_links
+
+        # Zpracování profilového obrázku
+        if profile_image and allowed_file(profile_image.filename):
+            filename = secure_filename(profile_image.filename)
+            upload_folder = os.path.join(current_app.root_path, 'static', 'uploads')
+            if not os.path.exists(upload_folder):
+                os.makedirs(upload_folder)
+
+            file_path = os.path.join(upload_folder, filename)
+            profile_image.save(file_path)
+            user.profile_image = filename
+
+        # Uložíme změny do databáze
+        try:
+            db.session.commit()
+            flash('Profil byl úspěšně aktualizován!', 'success')
+        except Exception as e:
+            flash(f'Chyba při ukládání změn: {e}', 'error')
+            db.session.rollback()
+
+        return redirect(url_for('auth.profile'))
+
+    edit_mode = request.args.get('edit', 'false') == 'true'
+
+    # Sledování uživatele
+    follow_action = request.args.get('action')
+    if follow_action == 'follow':
+        current_user.follow(user)
+        db.session.commit()
+    elif follow_action == 'unfollow':
+        current_user.unfollow(user)
+        db.session.commit()
+
+    return render_template('profile.html', user=user, edit_mode=edit_mode)
