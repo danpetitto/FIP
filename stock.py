@@ -14,6 +14,20 @@ API_SEARCH_URL = 'https://api.polygon.io/v3/reference/tickers'
 API_DETAILS_URL = 'https://api.polygon.io/v3/reference/tickers/{ticker}'
 # API URL pro cenová data (vyžaduje placený tarif)
 API_PRICE_URL = 'https://api.polygon.io/v1/last/stocks/{ticker}'
+# URL pro Moody's Aaa Corporate Bond Yield (použijeme makroekonomický indikátor)
+MOODYS_AAA_YIELD_URL = 'https://api.example.com/moody-bond-yield'
+
+# Funkce pro získání Moody's Seasoned Aaa Corporate Bond Yield
+def get_moodys_aaa_yield():
+    try:
+        response = requests.get(MOODYS_AAA_YIELD_URL)
+        response.raise_for_status()
+        data = response.json()
+        # Očekáváme, že API vrátí výnos v procentech (např. 3.5)
+        return data.get('yield', 3.5)  # Použijeme výchozí hodnotu, pokud API selže
+    except Exception as e:
+        logging.error(f"Chyba při načítání Moody's Aaa Corporate Bond Yield: {e}")
+        return 3.5  # Výchozí hodnota, pokud selže API
 
 # Definuj Blueprint pro stock API
 stock_bp = Blueprint('stock', __name__)
@@ -65,7 +79,6 @@ def search_stocks():
         logging.error(f'Něco se pokazilo: {err}')
         return jsonify({'error': f'Něco se pokazilo: {err}'}), 500
 
-# Trasa pro zobrazení detailů akcie
 @stock_bp.route('/stocks/<ticker>', methods=['GET'])
 def get_stock(ticker):
     params = {'apiKey': POLYGON_API_KEY}
@@ -96,6 +109,9 @@ def get_stock(ticker):
         operating_margin = stock.info.get('operatingMargins', 'Data nejsou dostupná')
         net_margin = stock.info.get('profitMargins', 'Data nejsou dostupná')
 
+        # Získání odhadovaného růstu (Growth Rate)
+        estimated_growth_rate = stock.info.get('earningsGrowth', 0)  # Odhadovaný růst, pokud není dostupný, použijeme 0
+
         # Formátování marží a dalších ukazatelů (pokud jsou dostupné)
         if gross_margin != 'Data nejsou dostupná':
             gross_margin = f"{gross_margin * 100:.2f} %"
@@ -121,6 +137,20 @@ def get_stock(ticker):
         if market_cap == 'Data nejsou dostupná':
             logging.debug(f"Tržní kapitalizace pro {ticker} není dostupná.")
 
+        # Výpočet vnitřní hodnoty akcie (EPS * (7 + 1G * odhadovaný růst) * average yield / Moody's Aaa Corporate Bond Yield)
+        try:
+            if eps != 'Data nejsou dostupná':
+                eps = float(eps)
+                average_yield = 4.4
+                moodys_aaa_yield = get_moodys_aaa_yield()  # Získáme Moody's Aaa Corporate Bond Yield
+                intrinsic_value = (eps * (7 + (1 * estimated_growth_rate)) * average_yield) / moodys_aaa_yield
+                intrinsic_value = round(intrinsic_value, 2)
+            else:
+                intrinsic_value = 'Data nejsou dostupná'
+        except Exception as e:
+            logging.error(f"Chyba při výpočtu vnitřní hodnoty: {e}")
+            intrinsic_value = 'Data nejsou dostupná'
+
         # Kombinování všech získaných dat, včetně P/E poměru, EPS, a dalších finančních ukazatelů
         stock_data_combined = {
             'name': stock_name,
@@ -136,7 +166,8 @@ def get_stock(ticker):
             'roe': roe,  # ROE
             'annual_dividend_per_share': dividend_data.get('annual_dividend_per_share', 'Data nejsou dostupná'),  # Roční dividenda
             'dividend_yield': dividend_data.get('dividend_yield', 'Data nejsou dostupná'),  # Roční dividendový výnos
-            'dividend_payout_years': payout_years  # Počet let vyplácení dividend
+            'dividend_payout_years': payout_years,  # Počet let vyplácení dividend
+            'intrinsic_value': intrinsic_value  # Vnitřní hodnota akcie
         }
 
         # Renderování šablony s daty
@@ -155,6 +186,37 @@ def get_stock(ticker):
     except Exception as err:
         logging.error(f'Něco se pokazilo: {err}')
         return render_template('stocks.html', error=f'Něco se pokazilo: {err}', ticker=ticker)
+
+import requests
+import logging
+
+FRED_API_KEY = 'bb0cd01f86e198c1762cf75669b8e861'  # Váš API klíč
+FRED_API_URL = 'https://api.stlouisfed.org/fred/series/observations'
+
+def get_moodys_aaa_yield():
+    try:
+        # Parametry pro volání API
+        params = {
+            'series_id': 'AAA',  # Moody's Aaa Corporate Bond Yield
+            'api_key': FRED_API_KEY,
+            'file_type': 'json'
+        }
+        # Volání FRED API
+        response = requests.get(FRED_API_URL, params=params)
+        response.raise_for_status()  # Ověření, zda API volání bylo úspěšné
+        data = response.json()
+        
+        # Získání posledního pozorování výnosu
+        latest_observation = data['observations'][-1]
+        return float(latest_observation['value'])
+    
+    except Exception as e:
+        logging.error(f"Chyba při načítání Moody's Aaa Corporate Bond Yield: {e}")
+        return 3.5  # Výchozí hodnota v případě chyby
+
+# Příklad použití funkce
+moodys_aaa_yield = get_moodys_aaa_yield()
+print(f"Moody's Aaa Corporate Bond Yield: {moodys_aaa_yield}%")
 
 # Funkce pro získání počtu let výplaty dividend z yfinance
 def get_dividend_payout_years(ticker):
