@@ -176,6 +176,53 @@
     </div>
 </div>
      {% endif %}
+
+     {% if stock is defined and stock.ownership %}
+     <h4 class="mt-5 text-secondary text-center">Moje investice</h4>
+     <div class="row">
+         <div class="col-md-6">
+             <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
+                 <strong>Kupní hodnota:</strong>
+                 <span class="text-primary d-block display-6 font-weight-bold">{{ stock.ownership['Kupní hodnota'] }} USD</span>
+             </div>
+         </div>
+         <div class="col-md-6">
+             <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
+                 <strong>Počet akcií:</strong>
+                 <span class="text-primary d-block display-6 font-weight-bold">{{ stock.ownership['Počet akcií'] }}</span>
+             </div>
+         </div>
+     </div>
+     <div class="row">
+         <div class="col-md-6">
+             <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
+                 <strong>Aktuální hodnota:</strong>
+                 <span class="text-success d-block display-6 font-weight-bold">{{ stock.ownership['Aktuální hodnota'] }} USD</span>
+             </div>
+         </div>
+         <div class="col-md-6">
+             <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
+                 <strong>Nerealizovaný zisk:</strong>
+                 <span class="text-info d-block display-6 font-weight-bold">{{ stock.ownership['Profit'] }} USD</span>
+             </div>
+         </div>
+     </div>
+     <div class="row">
+         <div class="col-md-12">
+             <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
+                 <strong>Nerealizovaný zisk v %:</strong>
+                 <span class="text-info d-block display-6 font-weight-bold">
+                     {% if stock.ownership['Kupní hodnota'] != 'Neznámá' %}
+                         {{ (stock.ownership['Profit'] / stock.ownership['Kupní hodnota']) * 100 | round(2) }} %
+                     {% else %}
+                         Data nejsou dostupná
+                     {% endif %}
+                 </span>
+             </div>
+         </div>
+     </div>
+ {% endif %} 
+
 <!-- Soubory CSS a JS -->
 <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
