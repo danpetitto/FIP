@@ -79,24 +79,54 @@ def search_stocks():
         logging.error(f'Něco se pokazilo: {err}')
         return jsonify({'error': f'Něco se pokazilo: {err}'}), 500
 
+# Upravená funkce pro výpočet vnitřní hodnoty akcie podle Grahamova vzorce
+def calculate_intrinsic_value(eps, estimated_growth_rate):
+    """
+    Výpočet vnitřní hodnoty akcie pomocí původního Grahamova vzorce:
+    Intrinsic Value = EPS * (8.5 + 2 * odhadovaný růst v %)
+    """
+    try:
+        if eps is not None and eps != 'Data nejsou dostupná':
+            eps = float(eps)
+            # Převod growth rate na procenta, pokud je zadán jako desetinná hodnota
+            if estimated_growth_rate <= 1:  # Např. 0.1459 -> 14.59
+                estimated_growth_rate *= 100
+            intrinsic_value = eps * (8.5 + 2 * estimated_growth_rate)
+            return round(intrinsic_value, 2)
+        else:
+            return 'Data nejsou dostupná'
+    except (ValueError, TypeError, ZeroDivisionError) as e:
+        logging.error(f"Error calculating intrinsic value: {e}")
+        return 'Data nejsou dostupná'
+
+# Získání Moody's Aaa Corporate Bond Yield
+def get_moodys_aaa_yield():
+    try:
+        response = requests.get(MOODYS_AAA_YIELD_URL, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        return data.get('yield', 3.5)
+    except requests.RequestException as e:
+        logging.error(f"Error fetching Moody's Aaa Corporate Bond Yield: {e}")
+        return 3.5
+
+# Route pro získání dat o akciích
 @stock_bp.route('/stocks/<ticker>', methods=['GET'])
 def get_stock(ticker):
     params = {'apiKey': POLYGON_API_KEY}
     logging.debug(f"Requesting details for ticker: {ticker} with params: {params}")
 
     try:
-        # Získání informací o tickeru přes Polygon API
+        # Získání informací o tickeru
         response = requests.get(API_DETAILS_URL.format(ticker=ticker), params=params)
         response.raise_for_status()
         stock_data = response.json()
 
-        # Získání dividendových dat
+        # Získání dividendových dat a ceny
         dividend_data = get_polygon_dividend_data(ticker)
-
-        # Získání zpožděné ceny
         delayed_price = get_polygon_delayed_price(ticker)
 
-        # Získání P/E poměru, EPS, marží, EV/EBITDA, EBITDA a ROE pomocí yfinance
+        # Načítání dat o akcii pomocí yfinance
         stock = yf.Ticker(ticker)
         pe_ratio = stock.info.get('trailingPE', 'Data nejsou dostupná')
         eps = stock.info.get('trailingEps', 'Data nejsou dostupná')
@@ -104,15 +134,12 @@ def get_stock(ticker):
         ebitda = stock.info.get('ebitda', 'Data nejsou dostupná')
         roe = stock.info.get('returnOnEquity', 'Data nejsou dostupná')
 
-        # Získání marží
         gross_margin = stock.info.get('grossMargins', 'Data nejsou dostupná')
         operating_margin = stock.info.get('operatingMargins', 'Data nejsou dostupná')
         net_margin = stock.info.get('profitMargins', 'Data nejsou dostupná')
+        estimated_growth_rate = stock.info.get('earningsGrowth', 0)
 
-        # Získání odhadovaného růstu (Growth Rate)
-        estimated_growth_rate = stock.info.get('earningsGrowth', 0)  # Odhadovaný růst, pokud není dostupný, použijeme 0
-
-        # Formátování marží a dalších ukazatelů (pokud jsou dostupné)
+        # Formátování dat
         if gross_margin != 'Data nejsou dostupná':
             gross_margin = f"{gross_margin * 100:.2f} %"
         if operating_margin != 'Data nejsou dostupná':
@@ -122,70 +149,80 @@ def get_stock(ticker):
         if ev_to_ebitda != 'Data nejsou dostupná':
             ev_to_ebitda = f"{ev_to_ebitda:.2f}"
         if ebitda != 'Data nejsou dostupná':
-            ebitda = f"{ebitda / 1e9:.2f} B USD"  # Převedení EBITDA na miliardy USD
+            ebitda = f"{ebitda / 1e9:.2f} B USD"
         if roe != 'Data nejsou dostupná':
             roe = f"{roe * 100:.2f} %"
 
-        # Získání počtu let vyplácení dividend pomocí yfinance
-        payout_years = get_dividend_payout_years(ticker)
+        # Výpočet vnitřní hodnoty
+        intrinsic_value = calculate_intrinsic_value(eps, estimated_growth_rate)
 
-        # Kontrola a extrakce dat z API odpovědi
+        # Extrakce dalších informací
         stock_name = stock_data['results'].get('name', 'Název není dostupný')
         market_cap = stock_data['results'].get('market_cap', 'Data nejsou dostupná')
+        payout_years = get_dividend_payout_years(ticker)
 
-        # Pokud data nejsou dostupná, záznam o tom
-        if market_cap == 'Data nejsou dostupná':
-            logging.debug(f"Tržní kapitalizace pro {ticker} není dostupná.")
-
-        # Výpočet vnitřní hodnoty akcie (EPS * (7 + 1G * odhadovaný růst) * average yield / Moody's Aaa Corporate Bond Yield)
-        try:
-            if eps != 'Data nejsou dostupná':
-                eps = float(eps)
-                average_yield = 4.4
-                moodys_aaa_yield = get_moodys_aaa_yield()  # Získáme Moody's Aaa Corporate Bond Yield
-                intrinsic_value = (eps * (7 + (1 * estimated_growth_rate)) * average_yield) / moodys_aaa_yield
-                intrinsic_value = round(intrinsic_value, 2)
-            else:
-                intrinsic_value = 'Data nejsou dostupná'
-        except Exception as e:
-            logging.error(f"Chyba při výpočtu vnitřní hodnoty: {e}")
-            intrinsic_value = 'Data nejsou dostupná'
-
-        # Kombinování všech získaných dat, včetně P/E poměru, EPS, a dalších finančních ukazatelů
-        stock_data_combined = {
-            'name': stock_name,
-            'market_cap': market_cap,
-            'current_price': delayed_price,
-            'pe_ratio': pe_ratio,  # P/E poměr
-            'eps': eps,  # EPS
-            'gross_margin': gross_margin,  # Hrubá marže
-            'operating_margin': operating_margin,  # Provozní marže
-            'net_margin': net_margin,  # Čistá marže
-            'ev_to_ebitda': ev_to_ebitda,  # EV/EBITDA
-            'ebitda': ebitda,  # EBITDA
-            'roe': roe,  # ROE
-            'annual_dividend_per_share': dividend_data.get('annual_dividend_per_share', 'Data nejsou dostupná'),  # Roční dividenda
-            'dividend_yield': dividend_data.get('dividend_yield', 'Data nejsou dostupná'),  # Roční dividendový výnos
-            'dividend_payout_years': payout_years,  # Počet let vyplácení dividend
-            'intrinsic_value': intrinsic_value  # Vnitřní hodnota akcie
-        }
-
-        # Renderování šablony s daty
-        return render_template('stocks.html', stock=stock_data_combined, ticker=ticker)
+        # Kombinace a zobrazení dat
+        return render_stock_data(
+            stock_name, market_cap, delayed_price, pe_ratio, eps, gross_margin, operating_margin,
+            net_margin, ev_to_ebitda, ebitda, roe, dividend_data, payout_years, intrinsic_value, ticker
+        )
 
     except requests.exceptions.HTTPError as err:
         if err.response.status_code == 403:
-            logging.error(f"403 Forbidden: API klíč nemá přístup k požadovanému endpointu. Ověřte, zda máte správný tarif.")
-            return render_template('stocks.html', error="Přístup k API Polygon je zakázán. Ověřte, zda máte platný API klíč a odpovídající tarif.", ticker=ticker), 403
+            logging.error("403 Forbidden: API klíč nemá přístup k požadovanému endpointu.")
+            return render_template('stocks.html', error="API přístup zamítnut. Ověřte API klíč.", ticker=ticker), 403
         elif err.response.status_code == 404:
-            logging.error(f"404 Not Found: {err}")
-            return render_template('stocks.html', error="Akcie nebyla nalezena. Zkontrolujte symbol.", ticker=ticker), 404
-        logging.error(f'HTTP chyba: {err}')
+            logging.error("404 Not Found")
+            return render_template('stocks.html', error="Akcie nebyla nalezena.", ticker=ticker), 404
+        logging.error(f'HTTP error: {err}')
         return render_template('stocks.html', error=f'HTTP chyba: {err}', ticker=ticker)
 
     except Exception as err:
         logging.error(f'Něco se pokazilo: {err}')
         return render_template('stocks.html', error=f'Něco se pokazilo: {err}', ticker=ticker)
+
+
+# Funkce pro kombinování dat a renderování šablony
+def render_stock_data(stock_name, market_cap, delayed_price, pe_ratio, eps, gross_margin, operating_margin,
+                      net_margin, ev_to_ebitda, ebitda, roe, dividend_data, payout_years, intrinsic_value, ticker):
+    stock_data_combined = {
+        'name': stock_name,
+        'market_cap': market_cap,
+        'current_price': delayed_price,
+        'pe_ratio': pe_ratio,
+        'eps': eps,
+        'gross_margin': gross_margin,
+        'operating_margin': operating_margin,
+        'net_margin': net_margin,
+        'ev_to_ebitda': ev_to_ebitda,
+        'ebitda': ebitda,
+        'roe': roe,
+        'annual_dividend_per_share': dividend_data.get('annual_dividend_per_share', 'Data nejsou dostupná'),
+        'dividend_yield': dividend_data.get('dividend_yield', 'Data nejsou dostupná'),
+        'dividend_payout_years': payout_years,
+        'intrinsic_value': intrinsic_value
+    }
+    return render_template('stocks.html', stock=stock_data_combined, ticker=ticker)
+
+# Funkce pro zpracování chyb z API
+def handle_api_error(err, ticker):
+    if isinstance(err, requests.exceptions.HTTPError):
+        if err.response.status_code == 403:
+            logging.error("403 Forbidden: API klíč nemá přístup k požadovanému endpointu.")
+            return render_template(
+                'stocks.html',
+                error="Přístup k API Polygon je zakázán. Ověřte, zda máte platný API klíč a odpovídající tarif.",
+                ticker=ticker
+            ), 403
+        elif err.response.status_code == 404:
+            logging.error(f"404 Not Found: {err}")
+            return render_template('stocks.html', error="Akcie nebyla nalezena. Zkontrolujte symbol.", ticker=ticker), 404
+    logging.error(f"HTTP chyba: {err}")
+    return render_template('stocks.html', error=f"HTTP chyba: {err}", ticker=ticker)
+
+def handle_generic_error(err, ticker):
+    logging.error(f"Něco se pokazilo: {err}")
+    return render_template('stocks.html', error=f"Něco se pokazilo: {err}", ticker=ticker)
 
 import requests
 import logging
@@ -347,3 +384,180 @@ def stock_chart_data(ticker):
     except Exception as e:
         logging.error(f"Chyba při načítání dat pro graf: {e}")
         return jsonify({'error': 'Nepodařilo se načíst data pro graf'}), 500
+    
+
+import os
+import logging
+import openai
+import yfinance as yf
+from flask import render_template, Blueprint
+from dotenv import load_dotenv
+
+# Načtení .env souboru pro získání klíčů
+load_dotenv()
+
+# Získání API klíčů z prostředí
+POLYGON_API_KEY = os.getenv('POLYGON_API_KEY')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+
+# Zkontrolujeme, jestli se OpenAI klíč správně načetl
+if not OPENAI_API_KEY:
+    raise ValueError("OpenAI API klíč nebyl nalezen v prostředí.")
+
+# Nastavíme OpenAI API klíč pro knihovnu openai
+openai.api_key = OPENAI_API_KEY
+
+# Funkce pro výpočet předpokládané změny ceny na základě růstu
+def calculate_price_change(current_price, growth_rate, eps):
+    # Pokud není k dispozici růstový odhad nebo EPS, nelze vypočítat
+    if growth_rate is None or eps is None:
+        return None
+    
+    # Odhad ceny na základě růstu EPS (velmi zjednodušené, bez dalších faktorů)
+    future_price = current_price * (1 + growth_rate)
+    return future_price
+
+# Funkce pro provedení AI analýzy
+def ai_stock_analysis(ticker, historical_data, current_price, eps, growth_rate):
+    try:
+        # Základní výpočet procentuální změny
+        future_price = calculate_price_change(current_price, growth_rate, eps)
+        estimated_change = ((future_price - current_price) / current_price) * 100 if future_price else "nelze odhadnout"
+
+        prompt = (
+            f"Analyzuj historická data pro akcii {ticker} a odhadni budoucí vývoj ceny akcie na základě následujících údajů:\n"
+            f"Historická data:\n{historical_data}\n"
+            f"Současná cena: {current_price}\n"
+            f"EPS (Zisk na akcii): {eps}\n"
+            f"Odhadovaný růst: {growth_rate}\n"
+            f"Odhadovaný budoucí vývoj ceny: {future_price}\n"
+            f"Jaká je očekávaná procentuální změna ceny této akcie ({estimated_change}%) a kdy k tomu může dojít? "
+            "Odhadni časový rámec, kdy by tato změna mohla nastat."
+        )
+        
+        # Volání OpenAI API s použitím modelu gpt-3.5-turbo
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",  # Nahraď modelem, ke kterému máš přístup
+            messages=[
+                {"role": "system", "content": "Jsi asistent pro analýzu akcií."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=300  # Zvýšíme limit pro lepší odpovědi
+        )
+        ai_analysis = response['choices'][0]['message']['content'].strip()
+
+        if not ai_analysis:
+            logging.error("OpenAI API vrátilo prázdnou odpověď.")
+            return "AI analýzu nebylo možné provést."
+
+        return ai_analysis
+    except Exception as e:
+        logging.error(f"Chyba při volání OpenAI API: {e}")
+        return "AI analýzu nebylo možné provést."
+
+# Trasa pro zobrazení AI analýzy
+@stock_bp.route('/ai_analysis/<ticker>', methods=['GET'])
+def get_ai_analysis(ticker):
+    try:
+        # Získání historických dat
+        stock = yf.Ticker(ticker)
+        historical_data = stock.history(period='5y')
+        eps = stock.info.get('trailingEps', None)
+        estimated_growth_rate = stock.info.get('earningsGrowth', None)
+
+        # Aktuální cena akcie
+        current_price = stock.history(period='1d')['Close'].iloc[-1]
+
+        # AI analýza
+        ai_analysis = ai_stock_analysis(ticker, historical_data, current_price, eps, estimated_growth_rate)
+
+        # Debugging informace
+        logging.info(f"AI analýza pro {ticker}: {ai_analysis}")
+
+        # Renderování šablony s AI analýzou
+        return render_template('ai_analysis.html', 
+                               ticker=ticker, 
+                               ai_analysis=ai_analysis, 
+                               current_price=current_price, 
+                               eps=eps, 
+                               growth_rate=estimated_growth_rate)
+
+    except Exception as err:
+        logging.error(f"Něco se pokazilo: {err}")
+        return render_template('ai_analysis.html', error=f"Něco se pokazilo: {err}", ticker=ticker)
+
+
+from flask import Blueprint, render_template
+import yfinance as yf
+import openai
+import logging
+
+@stock_bp.route('/financials/<ticker>', methods=['GET'])
+def get_financials(ticker):
+    try:
+        # Získání finančních výkazů z yFinance
+        stock = yf.Ticker(ticker)
+        financials = stock.financials
+        balance_sheet = stock.balance_sheet
+        cashflow = stock.cashflow
+
+        # Debug: Výpis finančních dat pro kontrolu
+        print(f"Financials: {financials}")
+        print(f"Balance Sheet: {balance_sheet}")
+        print(f"Cashflow: {cashflow}")
+
+        # Převedeme finanční data do formátu pro šablonu (řetězce pro lepší čitelnost)
+        financials_str = financials.to_string() if not financials.empty else "Data nejsou k dispozici"
+        balance_sheet_str = balance_sheet.to_string() if not balance_sheet.empty else "Data nejsou k dispozici"
+        cashflow_str = cashflow.to_string() if not cashflow.empty else "Data nejsou k dispozici"
+
+        # Vytvoříme prompt pro OpenAI pro analýzu výkazů
+        prompt = (
+            f"Analyzuj následující finanční výkazy pro společnost {ticker} a shrň jejich obsah:\n\n"
+            f"Finanční výkaz:\n{financials_str}\n\n"
+            f"Rozvaha:\n{balance_sheet_str}\n\n"
+            f"Přehled cash flow:\n{cashflow_str}\n\n"
+            "Shrň hlavní závěry a stav společnosti. Zmiň se o růstu, ziscích, dluhu a vyhlídkách do budoucna."
+        )
+
+        # Volání OpenAI API pro analýzu
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "Jsi finanční analytik."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=300
+        )
+        ai_analysis = response['choices'][0]['message']['content'].strip()
+
+        # Další finanční informace (mock data, pokud nejsou dostupná z yFinance)
+        stock_info = stock.info
+        current_price = stock_info.get('currentPrice', "N/A")
+        eps = stock_info.get('eps', "N/A")
+        growth_rate = stock_info.get('growthRate', "N/A")
+        ai_analysis_contains_growth = "růst" in ai_analysis.lower()
+
+        # Mock data pro očekávanou změnu ceny
+        expected_price_change = "10 %"  # Nebo získat z OpenAI odpovědi
+        expected_time_frame = "6 měsíců"  # Nebo získat z OpenAI odpovědi
+
+        # Renderování šablony s finančními výkazy a analýzou
+        return render_template(
+            'financials.html', 
+            ticker=ticker,
+            financials=financials_str,
+            balance_sheet=balance_sheet_str,
+            cashflow=cashflow_str,
+            ai_analysis=ai_analysis,
+            current_price=current_price,
+            eps=eps,
+            growth_rate=growth_rate,
+            ai_analysis_contains_growth=ai_analysis_contains_growth,
+            expected_price_change=expected_price_change,
+            expected_time_frame=expected_time_frame
+        )
+
+    except Exception as err:
+        logging.error(f"Něco se pokazilo při načítání finančních výkazů: {err}")
+        return render_template('financials.html', error=f"Něco se pokazilo: {err}", ticker=ticker)
