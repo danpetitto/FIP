@@ -50,6 +50,23 @@
                         <a class="nav-link" href="/portfolio/upload">Moje Portfolia</a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="/tax">Daňový report</a> <!-- Odkaz na daňový report -->
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('auth.profile') }}">Profil investora</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('stock.search_stocks_form') }}">Vyhledávání akcií</a> <!-- Odkaz na stock_search.html -->
+                    </li>
+                    <!-- New link to Fund Pick page -->
+                    <li class="nav-item">
+                        <!-- Odkaz na stránku Výběr fondu s použitím plného názvu blueprintu -->
+                        <a class="nav-link" href="{{ url_for('fund.fund_pick') }}">Výběr fondu</a>
+                    </li>
+                    </li>
+                        <a class="nav-link" href="{{ url_for('news.market_overview') }}">Sentimentová analýza trhu</a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="/auth/logout">Odhlásit se</a>
                     </li>
                 {% else %}
@@ -70,10 +87,13 @@
 
     <footer class="footer">
         <span>Staň se lepším investorem | FIP © 2024</span>
+        <div>
+            <a href="/profile" class="text-light">Profil investora</a> | <!-- Odkaz na profil investora -->
+            <a href="/tax" class="text-light">Daňový report</a> <!-- Odkaz na daňový report -->
+        </div>
     </footer>
 
     <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 </body>
 </html>
-
