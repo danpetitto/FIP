@@ -171,7 +171,7 @@ def upload():
     user_portfolios = Portfolio.query.filter_by(user_id=current_user.id).all()
     return render_template('upload.html', portfolios=user_portfolios)
 
-#výběr portfolia
+# Výběr portfolia
 @portfolio_bp.route('/select_portfolio/<int:portfolio_id>', methods=['GET'])
 @login_required
 def select_portfolio(portfolio_id):
@@ -216,6 +216,27 @@ def select_portfolio(portfolio_id):
     # Výpočet hodnoty portfolia po inflaci
     portfolio_with_inflation = calculate_portfolio_with_inflation(portfolio_value, inflation_rate)
 
+    # Generování AI komentáře
+    results = {
+        'portfolio_value': f"{round(portfolio_value, 2)} €",
+        'portfolio_with_inflation': f"{round(portfolio_with_inflation, 2)} €",
+        'inflation_rate': f"{inflation_rate if inflation_rate else 'Neznámá'} %",
+        'realized_profit': f"{round(realized_profit, 2)} €",
+        'realized_profit_percentage': f"{realized_profit_percentage} %",
+        'unrealized_profit': f"{round(unrealized_profit, 2)} €",
+        'unrealized_profit_percentage': f"{unrealized_profit_percentage} %",
+        'total_dividends': f"{round(dividend_results['total_dividends'], 2)} €",
+        'dividend_yield': f"{round(dividend_results['dividend_yield'], 2)} %",
+        'investment_duration': investment_duration,
+        'total_fees': f"{round(total_fees, 2)} €",
+        'fees_percentage': f"{fees_percentage} %",
+        'forex_impact_czk': f"{round(total_forex_impact_czk, 2)} CZK",
+        'forex_impact_eur': f"{round(total_forex_impact_czk / get_current_fx_rate('CZK'), 2)} €"
+    }
+
+    # Generování AI komentáře
+    ai_commentary = generate_ai_commentary(results, stock_info_list)
+
     return render_template(
         'process.html',
         results={
@@ -244,9 +265,9 @@ def select_portfolio(portfolio_id):
         position_labels=position_labels,
         position_percentages=position_percentages,
         stock_info_list=stock_info_list,
-        investment_duration=investment_duration
+        investment_duration=investment_duration,
+        ai_commentary=ai_commentary  # Přidání AI komentáře do šablony
     )
-
 
 # Route pro zobrazení detailů investic
 @portfolio_bp.route('/investment_details', methods=['GET'])
@@ -282,6 +303,9 @@ from models import db, Portfolio, Trade
 from datetime import datetime
 from manual import store_manual_trade  # Importujeme funkci z manual.py
 
+from datetime import datetime
+import math
+
 @portfolio_bp.route('/trades/add/<int:portfolio_id>', methods=['POST'])
 @login_required
 def add_trade(portfolio_id):
@@ -295,17 +319,40 @@ def add_trade(portfolio_id):
     datum = request.form.get('datum')
     typ_obchodu = request.form.get('typ')
     ticker = request.form.get('ticker')
-    cena = float(request.form.get('cena', 0))
-    pocet = int(request.form.get('pocet', 1))  # Počet akcií
-    poplatky = float(request.form.get('poplatky', 0))
+    cena = float(request.form.get('cena', 0)) or 0.0  # Pokud cena je NaN, nastavíme ji na 0
+    pocet = int(request.form.get('pocet', 1)) or 0  # Pokud pocet je NaN, nastavíme jej na 0
+    poplatky = float(request.form.get('poplatky', 0)) or 0.0  # Pokud poplatky jsou NaN, nastavíme je na 0
 
     # Vypočítáme hodnotu
     hodnota = cena * pocet
 
+    # Ošetření případných hodnot NaN před uložením
+    if math.isnan(cena):
+        cena = 0.0
+    if math.isnan(pocet):
+        pocet = 0
+    if math.isnan(hodnota):
+        hodnota = 0.0
+    if math.isnan(poplatky):
+        poplatky = 0.0
+
+    # Ošetření formátu data
+    try:
+        # Nejprve zkusíme formát '%d-%m-%Y'
+        datum_obj = datetime.strptime(datum, '%d-%m-%Y')
+    except ValueError:
+        try:
+            # Pokud to selže, zkusíme '%Y-%m-%d'
+            datum_obj = datetime.strptime(datum, '%Y-%m-%d')
+        except ValueError:
+            # Pokud ani to nefunguje, vyhodíme chybu
+            flash('Datum má neplatný formát.', 'error')
+            return redirect(url_for('portfolio.upload'))
+
     # Vytvoření nové transakce a uložení do databáze
     novy_obchod = Trade(
         portfolio_id=portfolio_id,
-        datum=datetime.strptime(datum, '%Y-%m-%d'),
+        datum=datum_obj,
         typ_obchodu=typ_obchodu,
         ticker=ticker,
         cena=cena,
@@ -323,18 +370,17 @@ def add_trade(portfolio_id):
     flash('Obchod byl úspěšně přidán.', 'success')
     return redirect(url_for('portfolio.trades', portfolio_id=portfolio_id))
 
-# Zobrazení obchodů pro konkrétní portfolio
+# Route pro zobrazení obchodů
 @portfolio_bp.route('/trades/<int:portfolio_id>', methods=['GET'])
 @login_required
 def trades(portfolio_id):
-    # Načteme portfolio z databáze
     portfolio = Portfolio.query.get_or_404(portfolio_id)
 
     if portfolio.user != current_user:
         flash('Nemáte oprávnění k zobrazení tohoto portfolia.', 'error')
         return redirect(url_for('portfolio.upload'))
 
-    # Načteme obchody z databáze
+    # Načtení obchodů z databáze
     trades_data_from_db = Trade.query.filter_by(portfolio_id=portfolio_id).order_by(Trade.datum.desc()).all()
 
     # Načtení dat z CSV souboru v portfoliu (pokud existuje)
@@ -361,13 +407,38 @@ def trades(portfolio_id):
 
         # Přidáme počet do slovníků
         trades_data_from_csv = data[['Datum', 'Typ obchodu', 'Ticker', 'Cena', 'Počet', 'Hodnota', 'Transaction and/or third']].to_dict(orient='records')
+
+        # Uložení každého obchodu z CSV do databáze
+        for trade in trades_data_from_csv:
+            # Ošetření hodnot NaN z CSV
+            cena = float(trade['Cena']) if not math.isnan(trade['Cena']) else 0.0
+            pocet = int(trade['Počet']) if not math.isnan(trade['Počet']) else 0
+            hodnota = float(trade['Hodnota']) if not math.isnan(trade['Hodnota']) else 0.0
+            poplatky = float(trade['Transaction and/or third']) if not math.isnan(trade['Transaction and/or third']) else 0.0
+
+            # Vytvoření nové transakce
+            novy_obchod = Trade(
+                portfolio_id=portfolio_id,
+                datum=datetime.strptime(trade['Datum'], '%d-%m-%Y'),  # Parsování datumu
+                typ_obchodu=trade['Typ obchodu'],
+                ticker=trade['Ticker'],
+                cena=cena,
+                pocet=pocet,
+                hodnota=hodnota,
+                poplatky=poplatky
+            )
+            db.session.add(novy_obchod)
+        
+        # Uložíme všechny nové transakce do databáze
+        db.session.commit()
+
     else:
         flash('Soubor neobsahuje potřebné sloupce "Počet" nebo "Cena".', 'error')
         trades_data_from_csv = []
 
     # Spojení obchodů z CSV a z databáze
     trades_data_combined = trades_data_from_csv + [{
-        'Datum': trade.datum.strftime('%Y-%m-%d'),
+        'Datum': trade.datum.strftime('%d-%m-%Y'),
         'Typ obchodu': trade.typ_obchodu,
         'Ticker': trade.ticker,
         'Cena': trade.cena,
@@ -379,7 +450,6 @@ def trades(portfolio_id):
     # Zobrazení obchodů ve šabloně
     return render_template('trades.html', trades=trades_data_combined, portfolio_id=portfolio_id)
 
-# Smazání transakce
 @portfolio_bp.route('/trades/delete/<int:trade_id>/<int:portfolio_id>', methods=['POST'])
 @login_required
 def delete_trade(trade_id, portfolio_id):
@@ -391,6 +461,11 @@ def delete_trade(trade_id, portfolio_id):
     
     if portfolio.user != current_user:
         flash('Nemáte oprávnění smazat tento obchod.', 'error')
+        return redirect(url_for('portfolio.trades', portfolio_id=portfolio_id))
+
+    # Ověříme, zda transakce patří k portfoliu
+    if trade_to_delete.portfolio_id != portfolio_id:
+        flash('Transakce nepatří k tomuto portfoliu.', 'error')
         return redirect(url_for('portfolio.trades', portfolio_id=portfolio_id))
 
     # Smazání transakce
@@ -758,3 +833,63 @@ def delete_portfolio(portfolio_id):
         flash(f'Chyba při mazání portfolia: {str(e)}', 'error')
 
     return redirect(url_for('portfolio.upload'))
+
+
+
+import openai  # Ujistěte se, že je importováno pro OpenAI API
+
+# Funkce pro vytvoření AI komentáře
+def generate_ai_commentary(results, stock_info_list):
+    prompt = """
+    Imagine you are Warren Buffett analyzing a portfolio with the following metrics. 
+    Provide constructive criticism and advice. Discuss what could be improved, 
+    suggest diversification, and evaluate if any positions might be worth selling or holding.
+
+    Key Metrics:
+    Portfolio Value: {portfolio_value}
+    Realized Profit: {realized_profit} ({realized_profit_percentage})
+    Unrealized Profit: {unrealized_profit} ({unrealized_profit_percentage})
+    Total Dividends: {total_dividends}
+    Dividend Yield: {dividend_yield}
+    Investment Duration: {investment_duration} months
+    Fees: {total_fees} ({fees_percentage})
+    Forex Impact: {forex_impact_czk} (in CZK), {forex_impact_eur} (in EUR)
+
+    Portfolio Positions:
+    {positions}
+    """
+    # Formátování pozic do textu
+    positions = "\n".join(
+        f"{stock['ticker']}: Purchase Value - {stock['kupni_hodnota']} €, "
+        f"Current Value - {stock['aktualni_hodnota']} €, Profit - {stock['profit']} €"
+        for stock in stock_info_list
+    )
+
+    # Doplnění dat z výsledků portfolia
+    prompt = prompt.format(
+        portfolio_value=results['portfolio_value'],
+        realized_profit=results['realized_profit'],
+        realized_profit_percentage=results['realized_profit_percentage'],
+        unrealized_profit=results['unrealized_profit'],
+        unrealized_profit_percentage=results['unrealized_profit_percentage'],
+        total_dividends=results['total_dividends'],
+        dividend_yield=results['dividend_yield'],
+        investment_duration=results['investment_duration'],
+        total_fees=results['total_fees'],
+        fees_percentage=results['fees_percentage'],
+        forex_impact_czk=results['forex_impact_czk'],
+        forex_impact_eur=results['forex_impact_eur'],
+        positions=positions
+    )
+
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=200,
+            temperature=0.7
+        )
+        return response['choices'][0]['message']['content'].strip()
+    except Exception as e:
+        print(f"Error generating AI commentary: {e}")
+        return "Unable to generate AI commentary at this time."
