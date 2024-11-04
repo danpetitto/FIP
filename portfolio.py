@@ -156,9 +156,18 @@ def upload():
             flash('Prosím, nahrajte soubor ve formátu CSV.', 'error')
             return redirect(url_for('portfolio.upload'))
 
+        # Přiřazení správného zdroje na základě souboru
+        if 'XTB' in file.filename.upper():
+            source = 'XTB'
+        elif 'DEGIRO' in file.filename.upper():
+            source = 'DEGIRO'
+        else:
+            source = 'UNKNOWN'
+
         new_portfolio = Portfolio(
             name=portfolio_name,
             filename=file.filename,
+            source=source,  # Nastavení source
             data=file.read(),
             user=current_user
         )
@@ -169,7 +178,95 @@ def upload():
         return redirect(url_for('portfolio.upload'))
 
     user_portfolios = Portfolio.query.filter_by(user_id=current_user.id).all()
-    return render_template('upload.html', portfolios=user_portfolios)
+    return render_template('upload.html', portfolios=user_portfolios) 
+
+import re
+
+# Funkce pro získání ISIN pomocí OpenFIGI na základě symbolu
+def get_isin_from_symbol(symbol):
+    headers = {
+        'Content-Type': 'application/json',
+        'X-OPENFIGI-APIKEY': os.getenv('OPENFIGI_API_KEY')  # Použití klíče z prostředí
+    }
+    payload = [{
+        "idType": "TICKER",
+        "idValue": symbol,
+        "exchCode": "US"  # Specifikace burzy (volitelná)
+    }]
+    
+    try:
+        response = requests.post('https://api.openfigi.com/v3/mapping', headers=headers, json=payload)
+        if response.status_code == 200:
+            figi_data = response.json()
+            
+            # Ověření, zda odpověď obsahuje potřebné informace
+            if isinstance(figi_data, list) and len(figi_data) > 0:
+                if 'data' in figi_data[0] and len(figi_data[0]['data']) > 0:
+                    return figi_data[0]['data'][0].get('figi')  # Vrácení ISIN, pokud existuje
+                
+            # Pokud odpověď neobsahuje data
+            print(f"OpenFIGI API nevrátila žádná data pro symbol {symbol}. Odpověď: {figi_data}")
+        else:
+            print(f"Chyba při volání OpenFIGI API pro symbol {symbol}: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"Chyba při volání OpenFIGI API pro symbol {symbol}: {str(e)}")
+    
+    return None
+
+# Funkce pro transformaci XTB dat na formát DEGIRO
+def transform_xtb_to_degiro_structure(xtb_df):
+    # Vytvoření nové tabulky s požadovanými sloupci DEGIRO
+    transformed_data = pd.DataFrame()
+
+    # Rozdělení sloupce "Time" na "Datum" a "Čas"
+    if 'Time' in xtb_df.columns:
+        transformed_data['Datum'] = pd.to_datetime(xtb_df['Time']).dt.date
+        transformed_data['Čas'] = pd.to_datetime(xtb_df['Time']).dt.time
+    else:
+        raise KeyError("Sloupec 'Time' nebyl nalezen v XTB souboru.")
+
+    # Sloupec "Produkt" odpovídá sloupci "Symbol" z XTB
+    if 'Symbol' in xtb_df.columns:
+        transformed_data['Produkt'] = xtb_df['Symbol']
+    else:
+        raise KeyError("Sloupec 'Symbol' nebyl nalezen v XTB souboru.")
+
+    # Získání ISIN pomocí OpenFIGI API
+    transformed_data['ISIN'] = xtb_df['Symbol'].apply(get_isin_from_symbol)
+
+    # Přidáme prázdné sloupce "Reference", "Venue", protože tyto informace nejsou v XTB souboru
+    transformed_data['Reference'] = None
+    transformed_data['Venue'] = None
+
+    # Extrahujeme "Počet" a "Cena" z "Comment"
+    if 'Comment' in xtb_df.columns:
+        def extract_count_and_price(comment):
+            match = re.search(r'BUY ([\d.]+) @ ([\d.]+)', comment)
+            if match:
+                return float(match.group(1)), float(match.group(2))
+            return None, None
+
+        transformed_data[['Počet', 'Cena']] = xtb_df['Comment'].apply(lambda x: pd.Series(extract_count_and_price(x)))
+    else:
+        raise KeyError("Sloupec 'Comment' nebyl nalezen v XTB souboru.")
+
+    # Sloupec "Hodnota v domácí měně" odpovídá sloupci "Amount" z XTB
+    if 'Amount' in xtb_df.columns:
+        transformed_data['Hodnota v domácí měně'] = xtb_df['Amount']
+    else:
+        raise KeyError("Sloupec 'Amount' nebyl nalezen v XTB souboru.")
+
+    # Sloupec "Hodnota" nastavíme na stejný jako "Amount"
+    transformed_data['Hodnota'] = transformed_data['Hodnota v domácí měně']
+
+    # Přidáme prázdné sloupce pro "Směnný kurz", "Transaction and/or third"
+    transformed_data['Směnný kurz'] = None
+    transformed_data['Transaction and/or third'] = None
+
+    # Sloupec "Celkem" bude mít stejnou hodnotu jako "Hodnota"
+    transformed_data['Celkem'] = transformed_data['Hodnota']
+
+    return transformed_data
 
 # Výběr portfolia
 @portfolio_bp.route('/select_portfolio/<int:portfolio_id>', methods=['GET'])
@@ -186,6 +283,14 @@ def select_portfolio(portfolio_id):
         data = pd.read_csv(csv_data, encoding='utf-8')
     except pd.errors.EmptyDataError:
         flash('Soubor je prázdný nebo neplatný.', 'error')
+        return redirect(url_for('portfolio.upload'))
+
+    # Rozlišení typu souboru a transformace pouze pro XTB
+    if 'Time' in data.columns:
+        # Pokud je sloupec 'Time' v datech, jedná se o XTB soubor
+        data = transform_xtb_to_degiro_structure(data)
+    elif 'Datum' not in data.columns:
+        flash("Neplatný formát souboru. Očekáván je sloupec 'Datum' nebo 'Time'.", 'error')
         return redirect(url_for('portfolio.upload'))
 
     # Výpočty pro portfolio
@@ -211,7 +316,7 @@ def select_portfolio(portfolio_id):
     forex_impact_percentage = calculate_forex_impact_percentage(total_forex_impact_czk, portfolio_value)
 
     # Získání pevně definované inflace pro Českou republiku pro rok 2024
-    inflation_rate = get_czech_inflation_2024()  # Funkce pro získání pevné inflace (2.8 %)
+    inflation_rate = get_czech_inflation_2024()
 
     # Výpočet hodnoty portfolia po inflaci
     portfolio_with_inflation = calculate_portfolio_with_inflation(portfolio_value, inflation_rate)
@@ -228,45 +333,27 @@ def select_portfolio(portfolio_id):
         'total_dividends': f"{round(dividend_results['total_dividends'], 2)} €",
         'dividend_yield': f"{round(dividend_results['dividend_yield'], 2)} %",
         'investment_duration': investment_duration,
+        'dividend_prediction_10_years': f"{round(dividend_results['dividend_prediction_10_years'], 2)} €",
+        'tax_on_dividends': f"{round(dividend_results['tax_on_dividends'], 2)} €",
+        'invested': f"{round(invested_amount, 2)} €",
         'total_fees': f"{round(total_fees, 2)} €",
         'fees_percentage': f"{fees_percentage} %",
         'forex_impact_czk': f"{round(total_forex_impact_czk, 2)} CZK",
+        'forex_impact_percentage': f"{forex_impact_percentage} %",
         'forex_impact_eur': f"{round(total_forex_impact_czk / get_current_fx_rate('CZK'), 2)} €"
     }
 
-    # Generování AI komentáře
     ai_commentary = generate_ai_commentary(results, stock_info_list)
 
     return render_template(
         'process.html',
-        results={
-            'portfolio_value': f"{round(portfolio_value, 2)} €",
-            'portfolio_with_inflation': f"{round(portfolio_with_inflation, 2)} €",
-            'inflation_rate': f"{inflation_rate if inflation_rate else 'Neznámá'} %",  # Zobrazení aktuální inflace
-            'realized_profit': f"{round(realized_profit, 2)} €",
-            'realized_profit_percentage': f"{realized_profit_percentage} %",
-            'unrealized_profit': f"{round(unrealized_profit, 2)} €",
-            'unrealized_profit_percentage': f"{unrealized_profit_percentage} %",
-            'total_dividends': f"{round(dividend_results['total_dividends'], 2)} €",
-            'dividend_yield': f"{round(dividend_results['dividend_yield'], 2)} %",
-            'dividend_prediction_10_years': f"{round(dividend_results['dividend_prediction_10_years'], 2)} €",
-            'tax_on_dividends': f"{round(dividend_results['tax_on_dividends'], 2)} €",
-            'total_fees': f"{round(total_fees, 2)} €",
-            'fees_percentage': f"{fees_percentage} %",
-            'invested': f"{round(invested_amount, 2)} €",
-            'forex_impact_czk': f"{round(total_forex_impact_czk, 2)} CZK",  # Měnový dopad v CZK
-            'forex_impact_eur': f"{round(total_forex_impact_czk / get_current_fx_rate('CZK'), 2)} €",  # Měnový dopad v EUR
-            'forex_impact_percentage': f"{forex_impact_percentage} %",
-            'forex_results': forex_results  # Zobrazení jednotlivých výsledků transakcí
-        },
-        portfolio=portfolio,  # Předání objektu portfolio
-        stock_labels=['Technology', 'Healthcare', 'Finance'],
-        stock_percentages=[40, 30, 30],
-        position_labels=position_labels,
-        position_percentages=position_percentages,
+        results=results,
+        portfolio=portfolio,
+        stock_labels=position_labels,
+        stock_percentages=position_percentages,
         stock_info_list=stock_info_list,
         investment_duration=investment_duration,
-        ai_commentary=ai_commentary  # Přidání AI komentáře do šablony
+        ai_commentary=ai_commentary
     )
 
 # Route pro zobrazení detailů investic
