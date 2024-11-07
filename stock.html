@@ -4,166 +4,107 @@
 
 {% block content %}
 <div class="container my-5">
-    <h1 class="mb-4 text-primary font-weight-bold">Detail akcie - {{ ticker }}</h1>
-
-    {% if error %}
-        <div class="alert alert-danger">
-            {{ error }}
+    <div class="stock-detail-card">
+        <div class="stock-header d-flex align-items-center mb-4">
+            {% if stock.logo %}
+                <img src="{{ stock.logo }}" alt="Logo {{ ticker }}" class="stock-logo mr-3">
+            {% endif %}
+            <h1 class="stock-name">{{ stock.name }}</h1>
         </div>
-    {% else %}
-    <!-- stocks.html -->
-{% if stock.logo %}
-<div class="text-center mb-4">
-    <img src="{{ stock.logo }}" alt="Logo {{ ticker }}" class="logo">
-</div>
-{% endif %}
-        <!-- Stock Information Card -->
-        <div class="card shadow-sm mb-4 rounded-lg border-0">
-            <div class="card-header bg-gradient-primary text-white rounded-top py-3">
-                <h3 class="mb-0">{{ stock.name }}</h3>
+
+        <!-- Aktuální cena a změna ceny za posledních 12 měsíců -->
+        <div class="stock-price-section text-center mb-4">
+            <span class="stock-price display-4 font-weight-bold">{{ stock.current_price }} USD</span>
+            <p class="stock-price-change text-success">
+                {{ stock.price_change }} USD ({{ stock.price_change_percent }}%) za posledních 12 měsíců
+            </p>
+        </div>
+
+        <!-- Hlavní informační sekce -->
+        <div class="stock-info-card shadow-sm rounded-lg p-4 mb-4">
+            <div class="row">
+                <div class="col-md-4 info-item">
+                    <strong>P/E</strong>
+                    <span>{{ stock.pe_ratio }}</span>
+                </div>
+                <div class="col-md-4 info-item">
+                    <strong>EPS</strong>
+                    <span>{{ stock.eps }} USD</span>
+                </div>
+                <div class="col-md-4 info-item">
+                    <strong>Dividendy</strong>
+                    <span>{{ stock.dividend_yield }}%</span>
+                </div>
             </div>
-            <div class="card-body bg-light rounded-bottom">
-                <!-- General Stock Information -->
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
-                            <strong>Aktuální cena:</strong>
-                            <span class="text-success d-block display-6 font-weight-bold">{{ stock.current_price }} USD</span>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
-                            <strong>Tržní kapitalizace:</strong>
-                            {% if stock.market_cap == 'Data nejsou dostupná' %}
-                                <span class="text-warning d-block">Data nejsou dostupná</span>
-                            {% else %}
-                                <span class="text-primary d-block display-6 font-weight-bold">{{ stock.market_cap }} USD</span>
-                            {% endif %}
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
-                            <strong>P/E poměr:</strong>
-                            {% if stock.pe_ratio == 'Data nejsou dostupná' %}
-                                <span class="text-warning d-block">Data nejsou dostupná</span>
-                            {% else %}
-                                <span class="text-info d-block display-6 font-weight-bold">{{ stock.pe_ratio }}</span>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
+        </div>
 
-                <!-- EPS (Earnings Per Share) Block -->
-                <div class="row">
-                    <div class="col-md-4 offset-md-4">
-                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
-                            <strong>EPS (Zisk na akcii):</strong>
-                            {% if stock.eps == 'Data nejsou dostupná' %}
-                                <span class="text-warning d-block">Data nejsou dostupná</span>
-                            {% else %}
-                                <span class="text-info d-block display-6 font-weight-bold">{{ stock.eps }} USD</span>
-                            {% endif %}
-                        </div>
-                    </div>
+        <!-- Doplňující informace -->
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <div class="info-box">
+                    <strong>Dividenda (roční)</strong>
+                    <span>{{ stock.annual_dividend_per_share }} USD</span>
                 </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="info-box">
+                    <strong>Dividendy výplatní poměr</strong>
+                    <span>{{ stock.dividend_payout_ratio }}%</span>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="info-box">
+                    <strong>Počet let výplaty</strong>
+                    <span>{{ stock.dividend_payout_years }}</span>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="info-box">
+                    <strong>Provozní marže TTM</strong>
+                    <span>{{ stock.operating_margin_ttm }}%</span>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="info-box">
+                    <strong>ROE TTM</strong>
+                    <span>{{ stock.roe_ttm }}</span>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="info-box">
+                    <strong>EBITDA</strong>
+                    <span>{{ stock.ebitda }}</span>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="info-box">
+                    <strong>EV/EBITDA</strong>
+                    <span>{{ stock.ev_to_ebitda }}</span>
+                </div>
+            </div>
+            <!-- Vnitřní hodnota akcie -->
+            <div class="col-md-12 mb-3">
+                <div class="info-box">
+                    <strong>Vnitřní hodnota akcie:</strong>
+                    {% if stock.intrinsic_value == 'Data nejsou dostupná' %}
+                        <span class="text-warning">Data nejsou dostupná</span>
+                    {% else %}
+                        <span class="text-success font-weight-bold">{{ stock.intrinsic_value }} USD</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
 
-                <!-- AI Analysis Button -->
-                <div class="text-center mt-4">
-                    <a href="{{ url_for('stock.get_ai_analysis', ticker=ticker) }}" class="btn btn-primary">Zobrazit AI analýzu</a>
-                </div>
+    <!-- AI Analysis Button -->
+    <div class="text-center mt-4">
+        <a href="{{ url_for('stock.get_ai_analysis', ticker=ticker) }}" class="btn btn-primary">Zobrazit AI analýzu</a>
+    </div>
 
-                <!-- Odkaz na stránku s finančními výkazy -->
-                <div class="text-center mt-3">
-                    <a href="{{ url_for('stock.get_financials', ticker=ticker) }}" class="btn btn-secondary">Zobrazit finanční výkazy</a>
-                </div>
-
-                <!-- Dividend Information Block -->
-                <h4 class="mt-4 text-secondary text-center">Informace o dividendách</h4>
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
-                            <strong>Roční dividendový výnos (%):</strong>
-                            {% if stock.dividend_yield == 'Data nejsou dostupná' %}
-                                <span class="text-warning d-block">Výnos není dostupný</span>
-                            {% else %}
-                                <span class="text-success d-block display-6 font-weight-bold">{{ stock.dividend_yield }}</span>
-                            {% endif %}
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
-                            <strong>Roční dividenda na akcii (USD):</strong>
-                            {% if stock.annual_dividend_per_share == 'Data nejsou dostupná' %}
-                                <span class="text-warning d-block">Data nejsou dostupná</span>
-                            {% else %}
-                                <span class="text-primary d-block display-6 font-weight-bold">{{ stock.annual_dividend_per_share }}</span>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Dividend Payout Years Block -->
-                <div class="row">
-                    <div class="col-md-12">
-                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
-                            <strong>Počet let výplaty dividend:</strong>
-                            {% if stock.dividend_payout_years == 'Data nejsou dostupná' %}
-                                <span class="text-warning d-block">Data nejsou dostupná</span>
-                            {% else %}
-                                <span class="text-info d-block display-6 font-weight-bold">{{ stock.dividend_payout_years }}</span>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Financial Ratios Block -->
-                <h4 class="mt-4 text-secondary text-center">Finanční ukazatele</h4>
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
-                            <strong>EV/EBITDA:</strong>
-                            {% if stock.ev_to_ebitda == 'Data nejsou dostupná' %}
-                                <span class="text-warning d-block">Data nejsou dostupná</span>
-                            {% else %}
-                                <span class="text-info d-block display-6 font-weight-bold">{{ stock.ev_to_ebitda }}</span>
-                            {% endif %}
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
-                            <strong>EBITDA:</strong>
-                            {% if stock.ebitda == 'Data nejsou dostupná' %}
-                                <span class="text-warning d-block">Data nejsou dostupná</span>
-                            {% else %}
-                                <span class="text-primary d-block display-6 font-weight-bold">{{ stock.ebitda }}</span>
-                            {% endif %}
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
-                            <strong>ROE (Return on Equity):</strong>
-                            {% if stock.roe == 'Data nejsou dostupná' %}
-                                <span class="text-warning d-block">Data nejsou dostupná</span>
-                            {% else %}
-                                <span class="text-info d-block display-6 font-weight-bold">{{ stock.roe }}</span>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Intrinsic Value Block -->
-                <div class="row">
-                    <div class="col-md-12">
-                        <div class="p-3 mb-3 bg-white shadow-sm rounded-lg text-center">
-                            <strong>Vnitřní hodnota akcie:</strong>
-                            {% if stock.intrinsic_value == 'Data nejsou dostupná' %}
-                                <span class="text-warning d-block">Data nejsou dostupná</span>
-                            {% else %}
-                                <span class="text-success d-block display-6 font-weight-bold">{{ stock.intrinsic_value }} USD</span>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
+    <!-- Odkaz na stránku s finančními výkazy -->
+    <div class="text-center mt-3">
+        <a href="{{ url_for('stock.get_financials', ticker=ticker) }}" class="btn btn-secondary">Zobrazit finanční výkazy</a>
+    </div>
 
                 <!-- Stock Chart Block -->
                 <h4 class="mt-4 text-secondary text-center">Graf ceny akcie</h4>
@@ -207,7 +148,6 @@
                 </div>
             </div> <!-- Konec card-body -->
         </div> <!-- Konec card -->
-    {% endif %}
 
     {% if stock is defined and stock.ownership %}
         <h4 class="mt-5 text-secondary text-center">Moje investice</h4>
