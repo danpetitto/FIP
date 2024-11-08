@@ -164,6 +164,14 @@ def upload():
         else:
             source = 'UNKNOWN'
 
+           # Načtení obsahu souboru a zpracování do DataFrame
+        try:
+            file_data = file.read().decode('utf-8')
+            data = pd.read_csv(pd.compat.StringIO(file_data))
+        except Exception as e:
+            flash(f'Chyba při čtení souboru: {str(e)}', 'error')
+            return redirect(url_for('portfolio.upload'))
+
         new_portfolio = Portfolio(
             name=portfolio_name,
             filename=file.filename,
@@ -268,6 +276,10 @@ def transform_xtb_to_degiro_structure(xtb_df):
 
     return transformed_data
 
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
 # Výběr portfolia
 @portfolio_bp.route('/select_portfolio/<int:portfolio_id>', methods=['GET'])
 @login_required
@@ -292,6 +304,24 @@ def select_portfolio(portfolio_id):
     elif 'Datum' not in data.columns:
         flash("Neplatný formát souboru. Očekáván je sloupec 'Datum' nebo 'Time'.", 'error')
         return redirect(url_for('portfolio.upload'))
+    
+    # Převod sloupce 'Datum' na datetime
+    data['Datum'] = pd.to_datetime(data['Datum'], format='%d-%m-%Y', errors='coerce')
+
+    # Odstranění řádků s neplatnými daty (NaT)
+    data = data.dropna(subset=['Datum'])
+
+    # Výpočet hodnoty portfolia v čase
+    data = data.sort_values(by='Datum')
+    open_positions = data[data['Počet'] > 0]
+    open_positions['Hodnota pozice'] = open_positions['Počet'] * open_positions['Cena']
+
+    # Seskupení a kumulativní součet hodnoty portfolia v čase
+    portfolio_value_over_time = open_positions.groupby('Datum')['Hodnota pozice'].sum().cumsum().reset_index()
+
+    # Převod na seznamy pro JavaScript graf
+    portfolio_dates = portfolio_value_over_time['Datum'].dt.strftime('%Y-%m-%d').tolist()
+    portfolio_values = portfolio_value_over_time['Hodnota pozice'].tolist()
 
     # Výpočty pro portfolio
     tickers_prices, portfolio_value, invested_amount, investment_duration, avg_monthly_investment, stock_info_list, position_percentages, position_labels = calculate_calculate_dividend_cash(data)
@@ -332,7 +362,7 @@ def select_portfolio(portfolio_id):
         'unrealized_profit_percentage': f"{unrealized_profit_percentage} %",
         'total_dividends': f"{round(dividend_results['total_dividends'], 2)} €",
         'dividend_yield': f"{round(dividend_results['dividend_yield'], 2)} %",
-        'investment_duration': investment_duration,
+        'investment_duration': f"{investment_duration}",
         'dividend_prediction_10_years': f"{round(dividend_results['dividend_prediction_10_years'], 2)} €",
         'tax_on_dividends': f"{round(dividend_results['tax_on_dividends'], 2)} €",
         'invested': f"{round(invested_amount, 2)} €",
@@ -353,7 +383,9 @@ def select_portfolio(portfolio_id):
         stock_percentages=position_percentages,
         stock_info_list=stock_info_list,
         investment_duration=investment_duration,
-        ai_commentary=ai_commentary
+        ai_commentary=ai_commentary,
+        portfolio_dates=portfolio_dates,
+        portfolio_values=portfolio_values
     )
 
 # Route pro zobrazení detailů investic
@@ -980,3 +1012,84 @@ def generate_ai_commentary(results, stock_info_list):
     except Exception as e:
         print(f"Error generating AI commentary: {e}")
         return "Unable to generate AI commentary at this time."
+    
+
+def calculate_open_positions_portfolio_value(data):
+    # Převod datumu na datetime formát
+    logging.debug("Převádím datumy na datetime formát")
+    data['Datum'] = pd.to_datetime(data['Datum'], format='%d-%m-%Y', errors='coerce')
+
+    # Ověříme, že sloupec 'Datum' neobsahuje neplatná data
+    if data['Datum'].isnull().any():
+        logging.error("Některá data ve sloupci 'Datum' nejsou validní")
+        raise ValueError("Některá data ve sloupci 'Datum' nejsou validní.")
+
+    # Setřídíme data podle datumu
+    data = data.sort_values(by='Datum')
+    logging.debug(f"Data po seřazení podle datumu: \n{data.head()}")
+
+    # Skupinujeme podle ISIN a sečteme počet akcií (kladné = nákup, záporné = prodej)
+    position_summary = data.groupby('ISIN')['Počet'].sum().reset_index()
+    logging.debug(f"Shrnutí pozic podle ISIN: \n{position_summary}")
+
+    # Filtrujeme pouze otevřené pozice
+    open_positions_filtered = position_summary[position_summary['Počet'] > 0]
+    logging.debug(f"Otevřené pozice po filtraci: \n{open_positions_filtered}")
+
+    # Připojíme zpět k původnímu datasetu, abychom získali další informace (např. ticker)
+    open_positions = pd.merge(open_positions_filtered, data, on='ISIN', how='left')
+    logging.debug(f"Otevřené pozice s podrobnostmi: \n{open_positions}")
+
+    # Získání tickeru pro každou neprodanou pozici
+    open_positions['Ticker'] = open_positions['ISIN'].apply(get_ticker_from_isin)
+
+    # Získání aktuální ceny pro každou neprodanou pozici pomocí Polygon API
+    open_positions['Aktuální Cena'] = open_positions['Ticker'].apply(get_delayed_price_polygon)
+
+    # Výpočet hodnoty pozice (Počet akcií * Aktuální cena)
+    open_positions['Hodnota pozice'] = open_positions['Počet_x'] * open_positions['Aktuální Cena']
+    logging.debug(f"Otevřené pozice s hodnotou: \n{open_positions}")
+
+    # Výpočet hodnoty portfolia v čase - kumulativně podle data
+    portfolio_value_over_time = open_positions.groupby('Datum')['Hodnota pozice'].sum().cumsum().reset_index()
+    logging.debug(f"Výpočet hodnoty portfolia v čase: \n{portfolio_value_over_time}")
+
+    # Získání poslední hodnoty z kumulativního součtu
+    last_portfolio_value = portfolio_value_over_time['Hodnota pozice'].iloc[-1]
+
+    # Výpočet celkové aktuální hodnoty portfolia
+    total_portfolio_value = calculate_portfolio_value(data)
+
+    # Porovnáme poslední kumulativní hodnotu s aktuální hodnotou portfolia
+    if not last_portfolio_value == total_portfolio_value:
+        logging.warning(f"Poslední kumulativní hodnota ({last_portfolio_value}) se neshoduje s aktuální hodnotou portfolia ({total_portfolio_value}).")
+
+    return portfolio_value_over_time
+
+@portfolio_bp.route('/view/<int:portfolio_id>', methods=['GET'])
+@login_required
+def view_portfolio(portfolio_id):
+    portfolio = Portfolio.query.get(portfolio_id)
+
+    if not portfolio or portfolio.user_id != current_user.id:
+        flash('Portfolio nebylo nalezeno nebo k němu nemáte přístup.', 'error')
+        return redirect(url_for('portfolio.upload'))
+
+    # Načti data portfolia ze stringu (z databáze) do DataFrame
+    try:
+        data = pd.read_csv(pd.compat.StringIO(portfolio.data))
+        # Vypočítej hodnotu portfolia v čase
+        portfolio_value_over_time = calculate_open_positions_portfolio_value(data)
+    except Exception as e:
+        flash(f'Chyba při zpracování dat portfolia: {str(e)}', 'error')
+        return redirect(url_for('portfolio.upload'))
+
+    # Připrav data pro JavaScript - převod na seznam
+    portfolio_dates = portfolio_value_over_time['Datum'].dt.strftime('%Y-%m-%d').tolist()
+    portfolio_values = portfolio_value_over_time['Hodnota pozice'].tolist()
+
+    # Debug výpisy pro kontrolu dat, která budou odeslána do JavaScriptu
+    logging.debug(f"Portfolio Dates pro JS: {portfolio_dates}")
+    logging.debug(f"Portfolio Values pro JS: {portfolio_values}")
+
+    return render_template('process.html', portfolio_dates=portfolio_dates, portfolio_values=portfolio_values) 
