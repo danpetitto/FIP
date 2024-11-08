@@ -109,41 +109,80 @@ def add_current_prices(data):
 
 #testování investovaná částka
 
-# Výpočet investované částky - pouze pro otevřené (neprodané) pozice
 def calculate_invested_amount(data):
-    # Skupinujeme podle ISIN a sečteme počet akcií (kladné = nákup, záporné = prodej)
-    position_summary = data.groupby('ISIN')['Počet'].sum().reset_index()
+    if 'ISIN' in data.columns:
+        # Logika pro Degiro
+        # Skupinujeme podle ISIN a sečteme počet akcií (kladné = nákup, záporné = prodej)
+        position_summary = data.groupby('ISIN')['Počet'].sum().reset_index()
 
-    # Filtrujeme pouze ISINy, které mají kladný součet (pozice stále otevřené)
-    open_positions_filtered = position_summary[position_summary['Počet'] > 0]
+        # Filtrujeme pouze ISINy, které mají kladný součet (pozice stále otevřené)
+        open_positions_filtered = position_summary[position_summary['Počet'] > 0]
 
-    # Připojíme zpět k původnímu datasetu, abychom získali další informace (např. pořizovací cena, měna)
-    open_positions = pd.merge(open_positions_filtered, data, on='ISIN', how='left')
+        # Připojíme zpět k původnímu datasetu, abychom získali další informace (např. pořizovací cena, měna)
+        open_positions = pd.merge(open_positions_filtered, data, on='ISIN', how='left')
 
-    # Inicializujeme celkovou investovanou částku
-    total_invested = 0
+        # Inicializujeme celkovou investovanou částku
+        total_invested = 0
 
-    # Výpočet investované částky
-    for _, row in open_positions.iterrows():
-        if row['Počet_x'] > 0:  # Pouze kladné pozice
-            currency = row['Unnamed: 8']  # Zde je měna (např. USD, CZK)
-            amount = row['Cena'] * row['Počet_x']  # Cena * Počet akcií
+        # Výpočet investované částky
+        for _, row in open_positions.iterrows():
+            if row['Počet_x'] > 0:  # Pouze kladné pozice
+                currency = row['Unnamed: 8']  # Zde je měna (např. USD, CZK)
+                amount = row['Cena'] * row['Počet_x']  # Cena * Počet akcií
 
-            if currency != 'EUR':
-                fx_rate = row['Směnný kurz']  # Použijeme směnný kurz z CSV
-                if fx_rate:
-                    amount_in_eur = amount / fx_rate  # Převod na EUR
+                if currency != 'EUR':
+                    fx_rate = row['Směnný kurz']  # Použijeme směnný kurz z CSV
+                    if fx_rate:
+                        amount_in_eur = amount / fx_rate  # Převod na EUR
+                    else:
+                        continue  # Přeskočíme tuto pozici, pokud není dostupný směnný kurz
                 else:
-                    continue  # Přeskočíme tuto pozici, pokud není dostupný směnný kurz
-            else:
-                amount_in_eur = amount  # Pokud je měna EUR, nepřevádíme
+                    amount_in_eur = amount  # Pokud je měna EUR, nepřevádíme
 
-            # Přičítáme investovanou částku
-            total_invested += amount_in_eur
+                # Přičítáme investovanou částku
+                total_invested += amount_in_eur
 
-    # Vrátíme celkovou investovanou částku naformátovanou v EUR
-    return round(total_invested, 2)
+        # Vrátíme celkovou investovanou částku naformátovanou v EUR
+        return round(total_invested, 2)
+    
+    elif 'Ticker' in data.columns:
+        # Logika pro XTB
+        # Skupinujeme podle tickeru a sečteme počet akcií (kladné = nákup, záporné = prodej)
+        position_summary = data.groupby('Ticker')['Objemy'].sum().reset_index()
 
+        # Filtrujeme pouze tickery, které mají kladný součet (pozice stále otevřené)
+        open_positions_filtered = position_summary[position_summary['Objemy'] > 0]
+
+        # Připojíme zpět k původnímu datasetu, abychom získali další informace (např. pořizovací cena, měna)
+        open_positions = pd.merge(open_positions_filtered, data, on='Ticker', how='left')
+
+        # Inicializujeme celkovou investovanou částku
+        total_invested = 0
+
+        # Výpočet investované částky
+        for _, row in open_positions.iterrows():
+            if row['Objemy'] > 0:  # Pouze kladné pozice
+                currency = row['Měna']  # Pro XTB, použijeme sloupec "Měna"
+                amount = row['Otevírací cena'] * row['Objemy']  # Otevírací cena * Počet akcií
+
+                if currency != 'EUR':
+                    fx_rate = row.get('Směnný kurz')  # Použijeme směnný kurz z CSV
+                    if fx_rate:
+                        amount_in_eur = amount / fx_rate  # Převod na EUR
+                    else:
+                        continue  # Přeskočíme tuto pozici, pokud není dostupný směnný kurz
+                else:
+                    amount_in_eur = amount  # Pokud je měna EUR, nepřevádíme
+
+                # Přičítáme investovanou částku
+                total_invested += amount_in_eur
+
+        # Vrátíme celkovou investovanou částku naformátovanou v EUR
+        return round(total_invested, 2)
+    
+    else:
+        raise ValueError("Neznámý formát dat. Chybí sloupce 'ISIN' nebo 'Ticker'.")
+   
 # Výpočet hodnoty portfolia - pouze pro otevřené (neprodané) pozice
 def calculate_portfolio_value(data):
     # Skupinujeme podle ISIN a sečteme počet akcií (kladné = nákup, záporné = prodej)
@@ -372,3 +411,5 @@ if inflation_rate is not None:
     print(f"Final Portfolio Value (adjusted for inflation): {portfolio_with_inflation} €")
 else:
     print("Nepodařilo se získat aktuální inflaci.")
+
+
