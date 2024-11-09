@@ -13,7 +13,15 @@
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Hodnota portfolia:</strong> 
-                            <span>{{ results.portfolio_value }}</span>
+                            <span id="portfolio_value">{{ results.portfolio_value }} </span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <strong>Hodnota portfolia (po započtení inflace):</strong>
+                            <span id="portfolio_with_inflation">{{ results.portfolio_with_inflation }} </span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <strong>Inflace (aktuální):</strong>
+                            <span>{{ results.inflation_rate }} </span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <strong>Realizovaný zisk:</strong> 
@@ -47,6 +55,10 @@
                             <span>({{ results.fees_percentage }} )</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
+                            <strong>Délka investování:</strong> 
+                            <span>{{ results.investment_duration }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
                             <strong>Investovaná částka:</strong> 
                             <span>{{ results.invested }} </span>
                         </li>
@@ -62,14 +74,25 @@
                         </li>
                     </ul>
                 </div>
-
-                <!-- Odkazy na další stránky -->
+                
+                <!-- Odkaz na detaily investic -->
                 <div class="text-center mb-4">
-                    <a href="{{ url_for('portfolio.investment_details', portfolio_id=portfolio.id) }}" class="btn btn-primary">Zobrazit detaily investic</a>
-                    <a href="{{ url_for('portfolio.dividend_calendar', portfolio_id=portfolio.id) }}" class="btn btn-secondary">Dividendový kalendář</a>
-                    <a href="{{ url_for('portfolio.trades', portfolio_id=portfolio.id) }}" class="btn btn-info">Historie obchodů</a>
-                </div>                
+                    <a href="{{ url_for('portfolio.investment_details') }}" class="btn btn-primary">Zobrazit detaily investic</a>
+                </div>    
+                <!-- Odkaz na dividendový kalendář -->
+                <div class="text-center mb-4">
+                     <a href="{{ url_for('portfolio.dividend_calendar', portfolio_id=portfolio.id) }}" class="btn btn-info">Zobrazit dividendový kalendář</a>
+               </div>
+                <!-- Odkaz na stránku trades.html -->
+                <div class="text-center mb-4">
+                    <a href="{{ url_for('portfolio.trades', portfolio_id=portfolio.id) }}" class="btn btn-secondary">Zobrazit obchody</a>
+                </div>            
             </div>
+        </div>
+
+        <!-- Tlačítko pro přepínání inflace -->
+        <div class="text-center mb-4">
+            <button class="btn btn-primary" onclick="toggleInflation()">Přepnout inflaci</button>
         </div>
 
         <!-- Zobrazení grafu rozložení investic do sektorů -->
@@ -84,7 +107,17 @@
         <div class="row justify-content-center mt-5">
             <div class="col-md-8">
                 <h4 class="text-center mb-3">Graf rozložení jednotlivých pozic</h4>
-                <canvas id="positionInvestmentChart"></canvas> <!-- Místo pro graf jednotlivých akcií -->
+                <canvas id="positionInvestmentChart" style="margin-bottom: 50px;"></canvas> <!-- Místo pro graf jednotlivých akcií -->
+            </div>
+        </div>
+
+        <!-- Přidání AI komentáře v procesu hodnocení -->
+        <div class="row justify-content-center mt-5">
+            <div class="col-md-8">
+                <h4 class="text-center mb-3">Komentář a doporučení od AI ve stylu Warrena Buffetta</h4>
+                <div class="alert alert-info">
+                    <p>{{ ai_commentary }}</p>
+                </div>
             </div>
         </div>
 
@@ -100,6 +133,7 @@
                         <div class="card-body">
                             <h5 class="card-title">{{ stock.ticker }}</h5>
                             <p class="card-text">
+                                <strong>Počet:</strong> {{ stock.pocet }}<br>
                                 <strong>Kupní hodnota:</strong> {{ stock.kupni_hodnota }} €<br>
                                 <strong>Aktuální hodnota:</strong> {{ stock.aktualni_hodnota }} €<br>
                                 <strong>Profit:</strong> {{ stock.profit }} €
@@ -118,7 +152,6 @@
         <!-- Skryté elementy pro předání dat do JS -->
         <div id="sectorChartLabels" style="display:none;">{{ stock_labels | default([]) | tojson }}</div>
         <div id="sectorChartData" style="display:none;">{{ stock_percentages | default([]) | tojson }}</div>
-
         <div id="positionChartLabels" style="display:none;">{{ position_labels | default([]) | tojson }}</div>
         <div id="positionChartData" style="display:none;">{{ position_percentages | default([]) | tojson }}</div>
     </div>
@@ -127,11 +160,32 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function() {
+            // Skrýt hodnotu s inflací při načtení stránky
+            document.getElementById('portfolio_with_inflation').style.display = 'none';
+
+            // Přepínání mezi hodnotou portfolia s inflací a bez
+            let showInflation = false;
+
+            window.toggleInflation = function() {
+                showInflation = !showInflation;
+                const portfolioValue = document.getElementById('portfolio_value');
+                const portfolioWithInflation = document.getElementById('portfolio_with_inflation');
+                
+                if (showInflation) {
+                    portfolioValue.style.display = 'none';
+                    portfolioWithInflation.style.display = 'block';
+                } else {
+                    portfolioValue.style.display = 'block';
+                    portfolioWithInflation.style.display = 'none';
+                }
+            }
+
             // Graf sektorů
             var ctxSector = document.getElementById('sectorInvestmentChart').getContext('2d');
             var sectorLabels = JSON.parse(document.getElementById('sectorChartLabels').textContent || '[]');
             var sectorData = JSON.parse(document.getElementById('sectorChartData').textContent || '[]');
 
+            // Definice barev
             var backgroundColors = [
                 'rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)', 'rgba(255, 206, 86, 0.2)', 
                 'rgba(75, 192, 192, 0.2)', 'rgba(153, 102, 255, 0.2)', 'rgba(255, 159, 64, 0.2)',
@@ -146,6 +200,7 @@
                 'rgba(173, 216, 230, 1)'
             ];
 
+            // Vykreslení grafu sektorů
             var sectorInvestmentChart = new Chart(ctxSector, {
                 type: 'pie',
                 data: {
@@ -165,6 +220,7 @@
             var positionLabels = JSON.parse(document.getElementById('positionChartLabels').textContent || '[]');
             var positionData = JSON.parse(document.getElementById('positionChartData').textContent || '[]');
 
+            // Vykreslení grafu jednotlivých akcií
             var positionInvestmentChart = new Chart(ctxPosition, {
                 type: 'pie',
                 data: {
@@ -180,4 +236,16 @@
             });
         });
     </script>
+
+    <script id="chartData" type="application/json">
+        {
+            "dates": {{ portfolio_dates | tojson }},
+            "values": {{ portfolio_values | tojson }}
+        }
+    </script>
+    
+    <canvas id="portfolioChart"></canvas>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="{{ url_for('static', filename='js/portfolio_charts.js') }}"></script>
 {% endblock %}
