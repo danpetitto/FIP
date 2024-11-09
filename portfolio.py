@@ -139,8 +139,10 @@ def get_price_for_month(ticker, date):
             attempts -= 1
     return price
 
-# Route pro nahrávání nového portfolia
-# Route pro nahrávání nového portfolia
+from io import StringIO  # Import StringIO z modulu io
+
+from datetime import datetime
+
 @portfolio_bp.route('/upload', methods=['GET', 'POST'])
 @login_required
 def upload():
@@ -164,20 +166,32 @@ def upload():
         else:
             source = 'UNKNOWN'
 
-           # Načtení obsahu souboru a zpracování do DataFrame
+        # Načtení obsahu souboru jako bytes
         try:
-            file_data = file.read().decode('utf-8')
-            data = pd.read_csv(pd.compat.StringIO(file_data))
+            file_data = file.read()  # Zůstává jako bytes
+            data = pd.read_csv(BytesIO(file_data), encoding='utf-8')
+
+            # Nastavení hodnoty 'date' na základě dat z CSV
+            if 'Datum' in data.columns:
+                date = pd.to_datetime(data['Datum'], dayfirst=True, errors='coerce').min()
+            else:
+                date = datetime.utcnow().date()  # Výchozí na aktuální datum, pokud není 'Datum' ve sloupci
+
+            if pd.isnull(date):
+                date = datetime.utcnow().date()  # Výchozí na aktuální datum, pokud převod selže
+
         except Exception as e:
             flash(f'Chyba při čtení souboru: {str(e)}', 'error')
             return redirect(url_for('portfolio.upload'))
 
+        # Vytvoření nového portfolia s načtenými daty
         new_portfolio = Portfolio(
             name=portfolio_name,
             filename=file.filename,
-            source=source,  # Nastavení source
-            data=file.read(),
-            user=current_user
+            source=source,
+            data=file_data,  
+            user_id=current_user.id,
+            date=date  # Nastavuje hodnotu date
         )
         db.session.add(new_portfolio)
         db.session.commit()
@@ -185,8 +199,9 @@ def upload():
         flash('Portfolio bylo úspěšně nahráno.', 'success')
         return redirect(url_for('portfolio.upload'))
 
+    # Načtení uživatelových portfolií pro zobrazení
     user_portfolios = Portfolio.query.filter_by(user_id=current_user.id).all()
-    return render_template('upload.html', portfolios=user_portfolios) 
+    return render_template('upload.html', portfolios=user_portfolios)
 
 import re
 
@@ -280,7 +295,16 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Výběr portfolia
+from datetime import timedelta
+
+from flask import Blueprint, render_template, redirect, url_for, flash
+from flask_login import login_required, current_user
+from io import BytesIO
+import pandas as pd
+from datetime import datetime
+from stock_info import get_stock_info  # Import funkce get_stock_info ze stock_info.py
+from finance import get_ticker_from_isin  # Z finance.py
+
 @portfolio_bp.route('/select_portfolio/<int:portfolio_id>', methods=['GET'])
 @login_required
 def select_portfolio(portfolio_id):
@@ -290,88 +314,97 @@ def select_portfolio(portfolio_id):
         flash('Nemáte oprávnění k zobrazení tohoto portfolia.', 'error')
         return redirect(url_for('portfolio.upload'))
 
-    csv_data = BytesIO(portfolio.data)
-    try:
-        data = pd.read_csv(csv_data, encoding='utf-8')
-    except pd.errors.EmptyDataError:
-        flash('Soubor je prázdný nebo neplatný.', 'error')
-        return redirect(url_for('portfolio.upload'))
+    # Pokud nejsou výsledky zastaralé a jsou již vypočítány, použij uložené hodnoty
+    if not portfolio.needs_recalculation() and portfolio.calculated_results:
+        results = portfolio.calculated_results
+        stock_info_list = results.get("stock_info_list", [])
+        position_labels = results.get("position_labels", [])
+        position_percentages = results.get("position_percentages", [])
+        portfolio_dates = results.get("portfolio_dates", [])
+        portfolio_values = results.get("portfolio_values", [])
+        investment_duration = results.get("investment_duration")
+    else:
+        # Čtení a zpracování dat z CSV
+        csv_data = BytesIO(portfolio.data)
+        try:
+            data = pd.read_csv(csv_data, encoding='utf-8')
+        except pd.errors.EmptyDataError:
+            flash('Soubor je prázdný nebo neplatný.', 'error')
+            return redirect(url_for('portfolio.upload'))
 
-    # Rozlišení typu souboru a transformace pouze pro XTB
-    if 'Time' in data.columns:
-        # Pokud je sloupec 'Time' v datech, jedná se o XTB soubor
-        data = transform_xtb_to_degiro_structure(data)
-    elif 'Datum' not in data.columns:
-        flash("Neplatný formát souboru. Očekáván je sloupec 'Datum' nebo 'Time'.", 'error')
-        return redirect(url_for('portfolio.upload'))
-    
-    # Převod sloupce 'Datum' na datetime
-    data['Datum'] = pd.to_datetime(data['Datum'], format='%d-%m-%Y', errors='coerce')
+        # Transformace formátu pro XTB, pokud je potřeba
+        if 'Time' in data.columns:
+            data = transform_xtb_to_degiro_structure(data)
+        elif 'Datum' not in data.columns:
+            flash("Neplatný formát souboru. Očekáván je sloupec 'Datum' nebo 'Time'.", 'error')
+            return redirect(url_for('portfolio.upload'))
+        
+        # Převod a čištění datumu
+        data['Datum'] = pd.to_datetime(data['Datum'], format='%d-%m-%Y', errors='coerce')
+        data = data.dropna(subset=['Datum'])
 
-    # Odstranění řádků s neplatnými daty (NaT)
-    data = data.dropna(subset=['Datum'])
+        # Výpočet hodnoty portfolia v čase
+        data = data.sort_values(by='Datum')
+        open_positions = data[data['Počet'] > 0]
+        open_positions['Hodnota pozice'] = open_positions['Počet'] * open_positions['Cena']
 
-    # Výpočet hodnoty portfolia v čase
-    data = data.sort_values(by='Datum')
-    open_positions = data[data['Počet'] > 0]
-    open_positions['Hodnota pozice'] = open_positions['Počet'] * open_positions['Cena']
+        # Kumulativní součet hodnoty portfolia v čase
+        portfolio_value_over_time = open_positions.groupby('Datum')['Hodnota pozice'].sum().cumsum().reset_index()
 
-    # Seskupení a kumulativní součet hodnoty portfolia v čase
-    portfolio_value_over_time = open_positions.groupby('Datum')['Hodnota pozice'].sum().cumsum().reset_index()
+        # Převod na seznamy pro JavaScript grafy
+        portfolio_dates = portfolio_value_over_time['Datum'].dt.strftime('%Y-%m-%d').tolist()
+        portfolio_values = portfolio_value_over_time['Hodnota pozice'].tolist()
 
-    # Převod na seznamy pro JavaScript graf
-    portfolio_dates = portfolio_value_over_time['Datum'].dt.strftime('%Y-%m-%d').tolist()
-    portfolio_values = portfolio_value_over_time['Hodnota pozice'].tolist()
+        # Výpočty pro portfolio (včetně dividend a měnových efektů)
+        tickers_prices, portfolio_value, invested_amount, investment_duration, avg_monthly_investment, stock_info_list, position_percentages, position_labels = calculate_calculate_dividend_cash(data)
+        forex_results, total_forex_impact_czk = calculate_forex_profit_loss(data)
+        dividend_results = calculate_dividend_cash(data)
+        realized_profit = calculate_realized_profit(data)
+        unrealized_profit = calculate_unrealized_profit(portfolio_value, invested_amount)
+        total_fees = calculate_fees(data)
 
-    # Výpočty pro portfolio
-    tickers_prices, portfolio_value, invested_amount, investment_duration, avg_monthly_investment, stock_info_list, position_percentages, position_labels = calculate_calculate_dividend_cash(data)
+        # Výpočty procentuálních hodnot
+        unrealized_profit_percentage = calculate_unrealized_profit_percentage(unrealized_profit, portfolio_value)
+        realized_profit_percentage = calculate_realized_profit_percentage(realized_profit, portfolio_value)
+        fees_percentage = calculate_fees_percentage(total_fees, portfolio_value)
+        forex_impact_percentage = calculate_forex_impact_percentage(total_forex_impact_czk, portfolio_value)
 
-    # Výpočet měnového dopadu (forex impact)
-    forex_results, total_forex_impact_czk = calculate_forex_profit_loss(data)
+        # Výpočet inflace
+        inflation_rate = get_czech_inflation_2024()
+        portfolio_with_inflation = calculate_portfolio_with_inflation(portfolio_value, inflation_rate)
 
-    # Výpočet dividendových údajů
-    dividend_results = calculate_dividend_cash(data)
+        # Uložení výsledků
+        results = {
+            'portfolio_value': f"{round(portfolio_value, 2)} €",
+            'portfolio_with_inflation': f"{round(portfolio_with_inflation, 2)} €",
+            'inflation_rate': f"{inflation_rate if inflation_rate else 'Neznámá'} %",
+            'realized_profit': f"{round(realized_profit, 2)} €",
+            'realized_profit_percentage': f"{realized_profit_percentage} %",
+            'unrealized_profit': f"{round(unrealized_profit, 2)} €",
+            'unrealized_profit_percentage': f"{unrealized_profit_percentage} %",
+            'total_dividends': f"{round(dividend_results['total_dividends'], 2)} €",
+            'dividend_yield': f"{round(dividend_results['dividend_yield'], 2)} %",
+            'investment_duration': investment_duration,
+            'dividend_prediction_10_years': f"{round(dividend_results['dividend_prediction_10_years'], 2)} €",
+            'tax_on_dividends': f"{round(dividend_results['tax_on_dividends'], 2)} €",
+            'invested': f"{round(invested_amount, 2)} €",
+            'total_fees': f"{round(total_fees, 2)} €",
+            'fees_percentage': f"{fees_percentage} %",
+            'forex_impact_czk': f"{round(total_forex_impact_czk, 2)} CZK",
+            'forex_impact_percentage': f"{forex_impact_percentage} %",
+            'forex_impact_eur': f"{round(total_forex_impact_czk / get_current_fx_rate('CZK'), 2)} €",
+            # Uložení grafových a seznamových dat
+            'stock_info_list': stock_info_list,
+            'position_labels': position_labels,
+            'position_percentages': position_percentages,
+            'portfolio_dates': portfolio_dates,
+            'portfolio_values': portfolio_values
+        }
 
-    # Výpočet realizovaného a nerealizovaného zisku
-    realized_profit = calculate_realized_profit(data)
-    unrealized_profit = calculate_unrealized_profit(portfolio_value, invested_amount)
-
-    # Výpočet poplatků
-    total_fees = calculate_fees(data)
-
-    # Výpočet procentuálních hodnot
-    unrealized_profit_percentage = calculate_unrealized_profit_percentage(unrealized_profit, portfolio_value)
-    realized_profit_percentage = calculate_realized_profit_percentage(realized_profit, portfolio_value)
-    fees_percentage = calculate_fees_percentage(total_fees, portfolio_value)
-    forex_impact_percentage = calculate_forex_impact_percentage(total_forex_impact_czk, portfolio_value)
-
-    # Získání pevně definované inflace pro Českou republiku pro rok 2024
-    inflation_rate = get_czech_inflation_2024()
-
-    # Výpočet hodnoty portfolia po inflaci
-    portfolio_with_inflation = calculate_portfolio_with_inflation(portfolio_value, inflation_rate)
-
-    # Generování AI komentáře
-    results = {
-        'portfolio_value': f"{round(portfolio_value, 2)} €",
-        'portfolio_with_inflation': f"{round(portfolio_with_inflation, 2)} €",
-        'inflation_rate': f"{inflation_rate if inflation_rate else 'Neznámá'} %",
-        'realized_profit': f"{round(realized_profit, 2)} €",
-        'realized_profit_percentage': f"{realized_profit_percentage} %",
-        'unrealized_profit': f"{round(unrealized_profit, 2)} €",
-        'unrealized_profit_percentage': f"{unrealized_profit_percentage} %",
-        'total_dividends': f"{round(dividend_results['total_dividends'], 2)} €",
-        'dividend_yield': f"{round(dividend_results['dividend_yield'], 2)} %",
-        'investment_duration': f"{investment_duration}",
-        'dividend_prediction_10_years': f"{round(dividend_results['dividend_prediction_10_years'], 2)} €",
-        'tax_on_dividends': f"{round(dividend_results['tax_on_dividends'], 2)} €",
-        'invested': f"{round(invested_amount, 2)} €",
-        'total_fees': f"{round(total_fees, 2)} €",
-        'fees_percentage': f"{fees_percentage} %",
-        'forex_impact_czk': f"{round(total_forex_impact_czk, 2)} CZK",
-        'forex_impact_percentage': f"{forex_impact_percentage} %",
-        'forex_impact_eur': f"{round(total_forex_impact_czk / get_current_fx_rate('CZK'), 2)} €"
-    }
+        # Uložení do databáze
+        portfolio.calculated_results = results
+        portfolio.last_calculated_at = datetime.utcnow()
+        db.session.commit()
 
     ai_commentary = generate_ai_commentary(results, stock_info_list)
 
@@ -939,7 +972,8 @@ def delete_portfolio(portfolio_id):
     print(f"Request to delete portfolio {portfolio_id}")
     portfolio_to_delete = Portfolio.query.get_or_404(portfolio_id)
 
-    if portfolio_to_delete.owner != current_user:
+    # Změna owner na user (ověřte, že `user` je správný atribut)
+    if portfolio_to_delete.user != current_user:
         flash('Nemáte oprávnění smazat toto portfolio.', 'error')
         return redirect(url_for('portfolio.upload'))
 
@@ -952,7 +986,6 @@ def delete_portfolio(portfolio_id):
         flash(f'Chyba při mazání portfolia: {str(e)}', 'error')
 
     return redirect(url_for('portfolio.upload'))
-
 
 
 import openai  # Ujistěte se, že je importováno pro OpenAI API
@@ -1012,6 +1045,7 @@ def generate_ai_commentary(results, stock_info_list):
     except Exception as e:
         print(f"Error generating AI commentary: {e}")
         return "Unable to generate AI commentary at this time."
+
     
 
 def calculate_open_positions_portfolio_value(data):
