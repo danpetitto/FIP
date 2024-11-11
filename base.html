@@ -1,116 +1,835 @@
-<!DOCTYPE html>
-<html lang="cs">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ /* Základní stylování */
+ body {
+    background-color: #181729; /* Barva hlavního pozadí */
+    color: #f5f5f6; /* Světlejší barva textu */
+    font-family: "Simple", Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+}
 
-    <!-- Načtení Bootstrapu -->
-    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+/* Logo a horní tlačítka */
+.top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px;
+    background-color: #171628; /* Barva horního navbaru */
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    height: 60px;
+}
 
-    <!-- Načtení vlastního CSS souboru -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+.logo {
+    max-width: 160px;
+    height: auto;
+    margin-left: 10px;
+}
 
-    <style>
-        body {
-            background-color: #f5f5f7; /* Světle šedá pozadí */
-            color: #1d1d1f; /* Tmavě šedý text */
-        }
+.top-buttons {
+    display: flex;
+    gap: 10px;
+    margin-right: 20px;
+}
 
-        /* Upravený navbar */
-        .navbar {
-            background-color: #2E063D; /* Barva navbaru */
-            border-radius: 15px; /* Zaoblené rohy */
-            padding: 10px 20px; /* Vnitřní odsazení */
-            margin: 0 2cm; /* Levý a pravý okraj pro zkrácení šířky navbaru */
-        }
+.top-btn {
+    padding: 10px 15px;
+    border-radius: 5px;
+    text-decoration: none;
+    font-weight: bold;
+    color: #f5f5f6;
+}
 
-        /* Logo ve navbaru */
-        .navbar-brand img {
-            width: 100px; /* Zvětšení loga */
-            height: auto;
-            margin-right: 10px;
-        }
+/* Boční navigační panel */
+.sidebar {
+    width: 200px;
+    background-color: #3127f7; /* Barva bočního panelu */
+    padding-top: 80px; /* Odsazení kvůli hornímu navbaru */
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 999;
+}
 
-        /* Styl pro text odkazu značky */
-        .navbar-brand {
-            font-weight: bold;
-            color: #ffffff !important;
-            display: flex;
-            align-items: center;
-        }
+.sidebar .nav-link {
+    color: #f5f5f6; /* Barva textu v bočním panelu */
+    padding: 15px 20px;
+    display: block;
+    border-radius: 5px;
+    font-weight: bold;
+}
 
-        .navbar-nav .nav-link {
-            color: #f5f5f7 !important; /* Světle šedé odkazy */
-        }
+.sidebar .nav-link.active, .sidebar .nav-link:hover {
+    background-color: #2A2E38;
+    color: #5A5FFF;
+}
 
-        .footer {
-            background-color: #333;
-            color: #f5f5f7;
-            padding: 10px 0;
-            position: fixed;
-            bottom: 0;
-            width: 100%;
-            text-align: center;
-        }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark">
-        <!-- Přidání loga vedle názvu značky -->
-        <a class="navbar-brand" href="/">
-            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo">
-            FIP
-        </a>
-        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav ml-auto">
-                {% if current_user.is_authenticated %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="/portfolio/upload">Moje Portfolia</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/tax">Daňový report</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('auth.profile') }}">Profil investora</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('stock.search_stocks_form') }}">Vyhledávání akcií</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('fund.fund_pick') }}">Výběr fondu</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('news.market_overview') }}">Sentimentová analýza trhu</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/auth/logout">Odhlásit se</a>
-                    </li>
-                {% else %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="/auth/signup">Zaregistrovat</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/auth/login">Přihlásit se</a>
-                    </li>
-                {% endif %}
-            </ul>
-        </div>
-    </nav>
+/* Hlavní obsah */
+.main-content {
+    margin-left: 200px; /* Odsazení hlavního obsahu kvůli sidebaru */
+    padding-top: 80px; /* Odsazení kvůli hornímu navbaru */
+    background-color: #181729;
+    padding: 30px;
+}
 
-    <div class="container mt-4">
-        {% block content %}{% endblock %}
-    </div>
+/* Úvodní text */
+.main-title {
+    font-size: 2rem;
+    color: #C3C5C9;
+    margin-bottom: 10px;
+}
 
-    <footer class="footer">
-        <span>Staň se lepším investorem | FIP © 2024</span>
-    </footer>
+.description {
+    font-size: 1rem;
+    color: #8A8F99;
+    margin-bottom: 30px;
+}
 
-    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
-</body>
-</html>
+/* Fialový blok "Představujeme" */
+.intro-section {
+    background-color: #20232A;
+    padding: 40px 20px;
+    text-align: center;
+    width: 680px;
+    margin: 0 auto;
+    border-radius: 8px;
+}
+
+.intro-title {
+    color: #f5f5f6;
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+/* Informace o investici zarovnané vlevo */
+.investor-info {
+    text-align: left;
+    margin: 20px auto;
+    max-width: 700px;
+}
+
+.investor-title {
+    color: #C3C5C9;
+    font-size: 1.2rem;
+}
+
+.investor-description {
+    color: #f5f5f6;
+}
+
+.investor-quote {
+    color: #8A8F99;
+    font-style: italic;
+}
+
+/* Sekce Premium a AI Features */
+.feature-section {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    padding: 20px 0;
+}
+
+.feature-card {
+    padding: 20px;
+    border-radius: 8px;
+    width: 300px;
+    color: #f5f5f6;
+}
+
+.premium {
+    background-color: #20232A;
+}
+
+.ai-features {
+    background-color: #16191F;
+    border: 1px solid #20232A;
+}
+
+.feature-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 15px;
+}
+
+.badge {
+    background-color: #16191F;
+    color: #f5f5f6;
+    border-radius: 15px;
+    padding: 5px 10px;
+    font-size: 0.9rem;
+}
+
+/* Fajfky pro funkce */
+.check-circle {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 20px;
+    font-weight: bold;
+    margin-right: 10px;
+}
+
+.premium-check {
+    background-color: #2E3242;
+}
+
+.ai-check {
+    background-color: #1A1D23;
+}
+
+.feature-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.feature-list li {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+/* Tlačítka pro jednotlivé funkce */
+.view-all-btn {
+    background-color: #2A2E38;
+    color: #f5f5f6;
+    text-align: center;
+    display: block;
+    padding: 10px;
+    border-radius: 5px;
+    margin-top: 15px;
+    text-decoration: none;
+}
+
+.ai-view-btn {
+    background-color: #20232A;
+    color: #f5f5f6;
+    text-align: center;
+    display: block;
+    padding: 10px;
+    border-radius: 5px;
+    margin-top: 15px;
+    text-decoration: none;
+}
+
+/* Základní styl pro tabulky */
+.table {
+    color: #f5f5f6;
+    background-color: #20232A;
+    border: 1px solid #2E3242;
+    margin-top: 15px;
+}
+
+.table thead th {
+    background-color: #2E3242;
+    color: #f5f5f6;
+    border: 1px solid #2E3242;
+}
+
+.table-bordered td, .table-bordered th {
+    border: 1px solid #2E3242;
+}
+
+.table-hover tbody tr:hover {
+    background-color: #2A2E38;
+}
+
+/* Spodní slogan */
+.footer {
+    text-align: center;
+    padding: 30px 0;
+}
+
+.footer-title {
+    font-size: 2rem;
+    font-weight: bold;
+    margin: 0;
+    color: #C3C5C9;
+}
+
+.highlight {
+    color: #5A5FFF;
+}
 
 
+
+/*Ikony v aplikaci*/
+
+/* Styl pro ikonu lupy */
+.search-icon {
+    width: 50px; /* Nastavte požadovanou šířku */
+    height: 50px; /* Nastavte požadovanou výšku */
+    display: inline-block;
+    transition: transform 0.2s; /* Animace pro efekt při najetí myší */
+}
+
+/* Zvětšení ikony při najetí myší */
+.search-icon:hover {
+    transform: scale(1.2); /* Zvětší ikonu o 20 % */
+}
+
+/* Styl pro ikonu profilu */
+.profile-icon {
+    width: 50px; /* Nastavte požadovanou šířku */
+    height: 50px; /* Nastavte požadovanou výšku */
+    display: inline-block;
+    transition: transform 0.2s; /* Animace pro efekt při najetí myší */
+}
+
+/* Zvětšení ikony při najetí myší */
+.profile-icon:hover {
+    transform: scale(1.2); /* Zvětší ikonu o 20 % */
+}
+
+
+/* Styl pro ikonu fondu */
+.fund-icon {
+    width: 50px; /* Nastavte požadovanou šířku ikony */
+    height: 50px; /* Nastavte požadovanou výšku ikony */
+    transition: transform 0.2s; /* Animace pro efekt při najetí myší */
+}
+
+/* Zvětšení ikony při najetí myší */
+.fund-icon:hover {
+    transform: scale(1.2); /* Zvětší ikonu o 20 % */
+}
+
+
+/* Styl pro sidebar odkazy */
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    color: #f5f5f6; /* Barva textu v sidebaru */
+    font-weight: bold;
+    padding: 40px 50px;
+    text-decoration: none;
+}
+
+.sidebar-link:hover {
+    background-color: #2A2E38; /* Zvýraznění pozadí při najetí myší */
+    color: #5A5FFF; /* Zvýrazněná barva textu při najetí myší */
+}
+
+/* Styl pro ikony v sidebaru */
+.sidebar-icon {
+    width: 60px; /* Nastavte požadovanou šířku ikony */
+    height: 60px; /* Nastavte požadovanou výšku ikony */
+    margin-right: 10px; /* Mezera mezi ikonou a textem */
+}
+
+
+
+
+
+/* Základní stylování */
+body {
+    background-color: #181729;
+    color: #f5f5f6;
+    font-family: "Simple", Arial, sans-serif;
+}
+
+/* Styl pro nadpis a logo akcie */
+.stock-header {
+    color: #9590c4;
+    font-size: 1.8rem;
+    font-weight: bold;
+}
+
+.stock-logo {
+    width: 80px;
+    height: auto;
+}
+
+/* Karta s informacemi o akcii */
+.info-card {
+    background-color: #1c1b2f;
+    color: #f5f5f6;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+/* Cena akcie */
+.price {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #75c585;
+}
+
+.price-change {
+    color: #75c585; /* Barva pro zobrazení změny ceny */
+}
+
+/* Styl pro jednotlivé informace */
+.info-item {
+    font-size: 1rem;
+    color: #f5f5f6;
+}
+
+/* Zaoblení pro vzhled podobný stylu Apple */
+.rounded {
+    border-radius: 12px;
+}
+
+
+/* Globální stylování */
+body {
+    background-color: #181729;
+    color: #f5f5f6;
+    font-family: "Inter", Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 200px;
+    background-color: #3127f7;
+    padding-top: 80px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 999;
+}
+
+/* Horní navbar */
+.top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px;
+    background-color: #171628;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    height: 60px;
+}
+
+/* Hlavní obsah */
+.main-content {
+    margin-left: 240px; /* Odsazení od levého sidebaru */
+    margin-top: 70px; /* Odsazení od horního navbaru */
+    padding-left: 20px; /* Vnitřní odsazení od levé strany */
+    padding-right: 20px;
+    width: calc(100% - 260px); /* Zajišťuje šířku vedle sidebaru */
+    max-width: 1200px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Styl pro sekci nahrání portfolia */
+.upload-card {
+    background-color: #1c1b2f;
+    border-radius: 8px;
+    color: #f5f5f6;
+    width: 100%; 
+    max-width: 800px;
+    padding: 30px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+/* Nadpis pro nahrání portfolia */
+.upload-title {
+    color: #c4befe;
+    font-size: 1.5rem;
+    font-weight: 500;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+/* Formulář a vstupy */
+.form-group {
+    margin-bottom: 1.5rem;
+    width: 100%;
+}
+
+.form-label {
+    color: #a3a1b1;
+    font-weight: bold;
+}
+
+.form-control {
+    background-color: #2A2E38;
+    border: 1px solid #5A5FFF;
+    color: #f5f5f6;
+    border-radius: 5px;
+    padding: 10px;
+    width: 100%;
+}
+
+.form-control:focus {
+    border-color: #5A5FFF;
+    box-shadow: 0 0 5px rgba(90, 95, 255, 0.5);
+}
+
+/* Tlačítko pro odeslání formuláře */
+.btn-upload {
+    background-color: #5A5FFF;
+    color: #f5f5f6;
+    font-weight: bold;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 5px;
+    transition: background-color 0.3s;
+    width: 100%;
+}
+
+.btn-upload:hover {
+    background-color: #333a4d;
+}
+
+/* Sekce existujících portfolií */
+.portfolio-title {
+    color: #c4befe;
+    font-size: 1.5rem;
+    font-weight: 500;
+    text-align: center;
+    margin-top: 40px;
+}
+
+/* Styl pro seznam portfolií */
+.list-group {
+    background-color: #1c1b2f;
+    border-radius: 8px;
+    width: 100%;
+    margin-top: 20px;
+}
+
+.list-group-item {
+    background-color: #2A2E38;
+    border: none;
+    color: #f5f5f6;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+}
+
+.list-group-item .portfolio-details strong {
+    font-weight: bold;
+    color: #f5f5f6;
+}
+
+.list-group-item .portfolio-details small {
+    color: #a3a1b1;
+}
+
+/* Tlačítka akcí pro portfolia */
+.portfolio-actions .btn-info {
+    background-color: #5A5FFF;
+    color: #f5f5f6;
+    font-weight: bold;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 5px;
+    margin-right: 5px;
+}
+
+.portfolio-actions .btn-info:hover {
+    background-color: #333a4d;
+}
+
+.portfolio-actions .btn-danger {
+    background-color: #9c3838;
+    color: #f5f5f6;
+    font-weight: bold;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 5px;
+}
+
+.portfolio-actions .btn-danger:hover {
+    background-color: #5a3030;
+}
+
+
+
+
+/* Globální stylování */
+body {
+    background-color: #181729;
+    color: #f5f5f6;
+    font-family: "Inter", Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+/* Nadpis stránky */
+h2 {
+    color: #c4befe;
+    font-size: 2rem;
+    text-align: left;
+    margin-bottom: 20px;
+    font-weight: 500;
+}
+
+/* Top navigace */
+.top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px;
+    background-color: #171628;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    height: 60px;
+}
+
+.logo {
+    max-width: 160px;
+    margin-left: 10px;
+}
+
+.top-buttons {
+    display: flex;
+    gap: 10px;
+    margin-right: 20px;
+}
+
+.top-btn {
+    padding: 10px 15px;
+    border-radius: 5px;
+    text-decoration: none;
+    font-weight: bold;
+    color: #f5f5f6;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 200px;
+    background-color: #3127f7;
+    padding-top: 80px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 999;
+}
+
+.sidebar .nav-link {
+    color: #f5f5f6;
+    padding: 15px 20px;
+    display: block;
+    border-radius: 5px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.sidebar .nav-link.active,
+.sidebar .nav-link:hover {
+    background-color: #2A2E38;
+    color: #5A5FFF;
+}
+
+/* Hlavní obsah */
+.main-content {
+    margin-left: 200px;
+    padding-top: 80px;
+    padding: 30px;
+    background-color: #181729;
+}
+
+.container {
+    padding-top: 80px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Mřížkové rozvržení pro hlavní obsah */
+.grid-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 20px;
+}
+
+/* Specifické styly pro všechny karty */
+.card {
+    padding: 20px;
+    border-radius: 8px;
+    color: #ffffff;
+    background-color: #1c1b2f;
+    text-transform: uppercase;
+    font-weight: 500;
+}
+
+/* Styl pro list-group-item v Nerealizovaném zisku */
+.list-group-item {
+    background-color: #1c1b2f !important; /* Nastavení tmavého pozadí */
+    border: none; /* Odstranění okrajů */
+    color: #f5f5f6;
+}
+
+/* Karta Hodnota portfolia */
+.card-portfolio-value {
+    background-color: #33b6ff;
+    grid-row: span 2; /* Roztažení na dva řádky */
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.card-portfolio-value .portfolio-amount {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.card-portfolio-value .card-subtitle {
+    font-size: 0.9rem;
+    margin-top: 5px;
+    color: #a3a1b1;
+}
+
+/* Inflace - menší blok textu */
+.inflation-block {
+    margin-top: 15px;
+    font-size: 0.9rem;
+    color: #a3a1b1;
+}
+
+/* Realizovaný a Nerealizovaný zisk */
+.card-realized-profit,
+.card-unrealized-profit {
+    background-color: #1c1b2f;
+    height: 100%;
+}
+
+.card-realized-profit .profit-value,
+.card-unrealized-profit .profit-value {
+    font-weight: bold;
+    font-size: 1.2rem;
+}
+
+/* Dynamické barvy pro profit (zelená pro pozitivní, červená pro negativní hodnoty) */
+.profit-positive {
+    color: #4caf50; /* Jemná zelená pro pozitivní hodnoty */
+}
+
+.profit-negative {
+    color: #f44336; /* Jemná červená pro negativní hodnoty */
+}
+
+/* Karta dividendy */
+.card-dividends {
+    background-color: #1c1b2f;
+    grid-column: span 1;
+    grid-row: span 2; /* Roztažení na dva řádky */
+}
+
+/* Karta investovaná částka */
+.card-invested {
+    background-color: #1c1b2f;
+}
+
+/* Karta měnový dopad */
+.card-forex-impact {
+    background-color: #1c1b2f;
+}
+
+/* Karta poplatky */
+.card-fees {
+    background-color: #9c3838;
+}
+
+/* Nastavení velikosti písma pro hlavní hodnoty */
+.portfolio-amount {
+    font-size: 1.8rem;
+    font-weight: bold;
+}
+
+/* Styly pro tlačítka */
+.btn-primary, 
+.btn-info, 
+.btn-secondary {
+    padding: 10px 15px;
+    font-weight: bold;
+    color: #f5f5f6;
+    border: none;
+    border-radius: 5px;
+}
+
+.btn-primary {
+    background-color: #5A5FFF;
+}
+
+.btn-info {
+    background-color: #20232A;
+}
+
+.btn-secondary {
+    background-color: #2A2E38;
+}
+
+.btn:hover {
+    opacity: 0.9;
+}
+
+/* Ikony */
+.search-icon,
+.profile-icon,
+.fund-icon {
+    width: 50px;
+    height: 50px;
+    display: inline-block;
+    transition: transform 0.2s;
+}
+
+.search-icon:hover,
+.profile-icon:hover,
+.fund-icon:hover {
+    transform: scale(1.2);
+}
+
+/* Sidebar odkazy */
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    color: #f5f5f6;
+    font-weight: bold;
+    padding: 40px 50px;
+    text-decoration: none;
+}
+
+.sidebar-link:hover {
+    background-color: #2A2E38;
+    color: #5A5FFF;
+}
+
+.sidebar-icon {
+    width: 60px;
+    height: 60px;
+    margin-right: 10px;
+}
+
+/* Styl pro přepínání inflace */
+#toggleInflationBtn {
+    background-color: #333a4d;
+    color: #f5f5f6;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.3s;
+}
+
+#toggleInflationBtn:hover {
+    background-color: #20232A;
+}
