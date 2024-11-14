@@ -1,0 +1,232 @@
+{% extends 'base.html' %}
+
+{% block title %}Přehled{% endblock %}
+
+{% block content %}
+<div class="container mt-5" style="font-family: 'Inter', Arial, sans-serif; color: #c4befe;">
+    <h2 class="text-center mb-4">PŘEHLED</h2>
+
+    <div class="grid-layout">
+        <!-- Portfolio Value Card (Vertical Block) -->
+        <div class="card card-portfolio-value mb-4 p-3">
+            <div class="card-header">HODNOTA PORTFOLIA</div>
+            <div class="card-body">
+                <div id="portfolio_value" class="portfolio-amount">{{ results.portfolio_value }} </div>
+                <div class="card-subtitle">přepočítáno k {{ results.date }}</div>
+                <div class="inflation-block">
+                    <div>Inflace: {{ results.inflation_rate }}</div>
+                    <div>Hodnota po inflaci: {{ results.portfolio_with_inflation }} </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Realized Profit Card -->
+        <div class="card card-realized-profit mb-4 p-3">
+            <div class="card-header">REALIZOVANÝ ZISK</div>
+            <div class="card-body">
+                <span class="{{ 'profit-positive' if results.realized_profit|float > 0 else 'profit-negative' }}">
+                    {{ results.realized_profit }} 
+                </span>
+                <span>({{ results.realized_profit_percentage }}%)</span>
+            </div>
+        </div>
+
+        <!-- Unrealized Profit Card -->
+        <div class="card card-unrealized-profit mb-4 p-3">
+            <div class="card-header">NEREALIZOVANÝ ZISK</div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item custom-list-item d-flex justify-content-between">
+                    <span class="{{ 'profit-positive' if results.unrealized_profit|float > 0 else 'profit-negative' }}">
+                        {{ results.unrealized_profit }}
+                    </span>
+                    <span>({{ results.unrealized_profit_percentage }}%)</span>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Dividends Card (Vertical Block) -->
+        <div class="card card-dividends mb-4 p-3">
+            <div class="card-header">DIVIDENDY</div>
+            <div class="card-body">
+                <div>Výše: {{ results.total_dividends }} </div>
+                <div>Yeld: {{ results.dividend_yield }}</div>
+                <div>Predikce na 10 let: {{ results.dividend_prediction_10_years }}</div>
+                <div>Daň: {{ results.tax_on_dividends }}</div>
+            </div>
+        </div>
+
+        <!-- Investment Amount Card -->
+        <div class="card card-invested mb-4 p-3">
+            <div class="card-header">INVESTOVANÁ ČÁSTKA</div>
+            <div class="card-body">
+                <div>{{ results.invested }} </div>
+            </div>
+        </div>
+
+        <!-- Forex Impact Card -->
+        <div class="card card-forex-impact mb-4 p-3">
+            <div class="card-header">MĚNOVÝ DOPAD</div>
+            <div class="card-body">
+                <div>{{ results.forex_impact_czk }} </div>
+                <div>({{ results.forex_impact_percentage }}%)</div>
+            </div>
+        </div>
+
+        <!-- Fees Card -->
+        <div class="card card-fees mb-4 p-3">
+            <div class="card-header">POPLATKY</div>
+            <div class="card-body">
+                <div>{{ results.total_fees }} </div>
+                <div>({{ results.fees_percentage }}%)</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Zobrazení grafu pro jednotlivé pozice -->
+<div class="row justify-content-center mt-5">
+    <div class="col-md-8">
+        <h4 class="text-center mb-3">Graf rozložení jednotlivých pozic</h4>
+        <canvas id="positionInvestmentChart" style="margin-bottom: 50px;"></canvas> <!-- Místo pro graf jednotlivých akcií -->
+    </div>
+</div>
+
+<!-- Přidání AI komentáře v procesu hodnocení -->
+<div class="row justify-content-center mt-5">
+    <div class="col-md-8">
+        <h4 class="text-center mb-3">Komentář a doporučení od AI ve stylu Warrena Buffetta</h4>
+        <div class="alert alert-info">
+            <p>{{ ai_commentary }}</p>
+        </div>
+    </div>
+</div>
+
+<!-- Zobrazení informací o jednotlivých akciích -->
+<div class="row justify-content-center mt-5">
+    <div class="col-md-8">
+        <h4 class="text-center mb-3">Informace o akciích</h4>
+
+        {% if stock_info_list %}
+            <!-- Zobrazení každé akcie v samostatné kartě -->
+            {% for stock in stock_info_list %}
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">{{ stock.ticker }}</h5>
+                    <p class="card-text">
+                        <strong>Počet:</strong> {{ stock.pocet }}<br>
+                        <strong>Kupní hodnota:</strong> {{ stock.kupni_hodnota }} €<br>
+                        <strong>Aktuální hodnota:</strong> {{ stock.aktualni_hodnota }} €<br>
+                        <strong>Profit:</strong> {{ stock.profit }} €
+                    </p>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="alert alert-warning text-center" role="alert">
+                Žádné informace o akciích nejsou dostupné.
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Skryté elementy pro předání dat do JS -->
+<div id="sectorChartLabels" style="display:none;">{{ stock_labels | default([]) | tojson }}</div>
+<div id="sectorChartData" style="display:none;">{{ stock_percentages | default([]) | tojson }}</div>
+<div id="positionChartLabels" style="display:none;">{{ position_labels | default([]) | tojson }}</div>
+<div id="positionChartData" style="display:none;">{{ position_percentages | default([]) | tojson }}</div>
+</div>
+
+<!-- Připojení externího JS souboru -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    // Skrýt hodnotu s inflací při načtení stránky
+    document.getElementById('portfolio_with_inflation').style.display = 'none';
+
+    // Přepínání mezi hodnotou portfolia s inflací a bez
+    let showInflation = false;
+
+    window.toggleInflation = function() {
+        showInflation = !showInflation;
+        const portfolioValue = document.getElementById('portfolio_value');
+        const portfolioWithInflation = document.getElementById('portfolio_with_inflation');
+        
+        if (showInflation) {
+            portfolioValue.style.display = 'none';
+            portfolioWithInflation.style.display = 'block';
+        } else {
+            portfolioValue.style.display = 'block';
+            portfolioWithInflation.style.display = 'none';
+        }
+    }
+
+    // Graf sektorů
+    var ctxSector = document.getElementById('sectorInvestmentChart').getContext('2d');
+    var sectorLabels = JSON.parse(document.getElementById('sectorChartLabels').textContent || '[]');
+    var sectorData = JSON.parse(document.getElementById('sectorChartData').textContent || '[]');
+
+    // Definice barev
+    var backgroundColors = [
+        'rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)', 'rgba(255, 206, 86, 0.2)', 
+        'rgba(75, 192, 192, 0.2)', 'rgba(153, 102, 255, 0.2)', 'rgba(255, 159, 64, 0.2)',
+        'rgba(199, 199, 199, 0.2)', 'rgba(255, 99, 71, 0.2)', 'rgba(144, 238, 144, 0.2)',
+        'rgba(173, 216, 230, 0.2)'
+    ];
+
+    var borderColors = [
+        'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)', 'rgba(255, 206, 86, 1)', 
+        'rgba(75, 192, 192, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)',
+        'rgba(199, 199, 199, 1)', 'rgba(255, 99, 71, 1)', 'rgba(144, 238, 144, 1)', 
+        'rgba(173, 216, 230, 1)'
+    ];
+
+    // Vykreslení grafu sektorů
+    var sectorInvestmentChart = new Chart(ctxSector, {
+        type: 'pie',
+        data: {
+            labels: sectorLabels,
+            datasets: [{
+                label: 'Procento zainvestováno',
+                data: sectorData,
+                backgroundColor: backgroundColors.slice(0, sectorData.length),
+                borderColor: borderColors.slice(0, sectorData.length),
+                borderWidth: 1
+            }]
+        }
+    });
+
+    // Graf jednotlivých akcií
+    var ctxPosition = document.getElementById('positionInvestmentChart').getContext('2d');
+    var positionLabels = JSON.parse(document.getElementById('positionChartLabels').textContent || '[]');
+    var positionData = JSON.parse(document.getElementById('positionChartData').textContent || '[]');
+
+    // Vykreslení grafu jednotlivých akcií
+    var positionInvestmentChart = new Chart(ctxPosition, {
+        type: 'pie',
+        data: {
+            labels: positionLabels,
+            datasets: [{
+                label: 'Procento zainvestováno do jednotlivých akcií',
+                data: positionData,
+                backgroundColor: backgroundColors.slice(0, positionData.length),
+                borderColor: borderColors.slice(0, positionData.length),
+                borderWidth: 1
+            }]
+        }
+    });
+});
+</script>
+
+<script id="chartData" type="application/json">
+{
+    "dates": {{ portfolio_dates | tojson }},
+    "values": {{ portfolio_values | tojson }}
+}
+</script>
+
+<canvas id="portfolioChart"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='js/portfolio_charts.js') }}"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+{% endblock %}
