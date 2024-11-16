@@ -313,6 +313,10 @@ def select_portfolio(portfolio_id):
     if portfolio.user != current_user:
         flash('Nemáte oprávnění k zobrazení tohoto portfolia.', 'error')
         return redirect(url_for('portfolio.upload'))
+    
+     # Inicializace proměnných s výchozími hodnotami
+    country_labels = []
+    country_percentages = []
 
     # Pokud nejsou výsledky zastaralé a jsou již vypočítány, použij uložené hodnoty
     if not portfolio.needs_recalculation() and portfolio.calculated_results:
@@ -323,6 +327,8 @@ def select_portfolio(portfolio_id):
         portfolio_dates = results.get("portfolio_dates", [])
         portfolio_values = results.get("portfolio_values", [])
         investment_duration = results.get("investment_duration")
+        country_labels = results.get("country_labels", [])
+        country_percentages = results.get("country_percentages", [])
     else:
         # Čtení a zpracování dat z CSV
         csv_data = BytesIO(portfolio.data)
@@ -373,6 +379,15 @@ def select_portfolio(portfolio_id):
         inflation_rate = get_czech_inflation_2024()
         portfolio_with_inflation = calculate_portfolio_with_inflation(portfolio_value, inflation_rate)
 
+        # Výpočet alokace podle akcií
+        stock_labels, stock_percentages = calculate_stock_allocation(data)
+
+       # Výpočet alokace podle zemí
+        country_labels, country_percentages = calculate_country_allocation(data)
+
+        # Výběr top investic podle profitu
+        top_investments = get_top_investments(stock_info_list)
+
         # Uložení výsledků
         results = {
             'portfolio_value': f"{round(portfolio_value, 2)} €",
@@ -398,7 +413,12 @@ def select_portfolio(portfolio_id):
             'position_labels': position_labels,
             'position_percentages': position_percentages,
             'portfolio_dates': portfolio_dates,
-            'portfolio_values': portfolio_values
+            'portfolio_values': portfolio_values,
+            'top_investments': top_investments,
+            'stock_labels': stock_labels,
+            'stock_percentages': stock_percentages,
+            'country_labels': country_labels,
+            'country_percentages': country_percentages
         }
 
         # Uložení do databáze
@@ -418,8 +438,11 @@ def select_portfolio(portfolio_id):
         investment_duration=investment_duration,
         ai_commentary=ai_commentary,
         portfolio_dates=portfolio_dates,
-        portfolio_values=portfolio_values
+        portfolio_values=portfolio_values,
+        country_labels=country_labels,  # Přidáno
+        country_percentages=country_percentages
     )
+
 
 # Route pro zobrazení detailů investic
 @portfolio_bp.route('/investment_details', methods=['GET'])
@@ -1127,3 +1150,147 @@ def view_portfolio(portfolio_id):
     logging.debug(f"Portfolio Values pro JS: {portfolio_values}")
 
     return render_template('process.html', portfolio_dates=portfolio_dates, portfolio_values=portfolio_values) 
+
+
+def get_country_from_isin(isin):
+    """
+    Získá zemi na základě prvních dvou písmen ISIN.
+    Prvních dvou písmen ISIN představuje kód země.
+    """
+    country_code = isin[:2].upper()
+    country_mapping = {
+        'US': 'United States',
+        'GB': 'United Kingdom',
+        'FR': 'France',
+        'DE': 'Germany',
+        'JP': 'Japan',
+        'CN': 'China',
+        'CA': 'Canada',
+        'AU': 'Australia',
+        'NL': 'Netherlands',
+        'IT': 'Italy',
+        'SE': 'Sweden',
+        'ES': 'Spain',
+        'CZ': 'Czech Republic',
+    }
+
+    country = country_mapping.get(country_code, 'Unknown Country')
+    print(f"ISIN: {isin}, Country Code: {country_code}, Country: {country}")
+    return country
+
+def calculate_country_allocation(data):
+    """
+    Funkce, která vypočítá procentuální rozložení investic do různých zemí.
+
+    Parameters:
+    data (DataFrame): DataFrame obsahující transakce portfolia.
+
+    Returns:
+    tuple: Seznam zemí a jejich odpovídajících procentuálních podílů v portfoliu.
+    """
+    # Vybereme otevřené pozice (počet > 0)
+    open_positions = data[data['Počet'] > 0].copy()
+    print("Open Positions (Country Allocation):")
+    print(open_positions)
+
+    # Přidáme sloupec s hodnotou každé pozice (počet akcií * cena)
+    open_positions['Hodnota pozice'] = open_positions['Počet'] * open_positions['Cena']
+    print("Open Positions with Position Value:")
+    print(open_positions)
+
+    # Přidáme sloupec se zemí na základě ISIN
+    open_positions['Země'] = open_positions['ISIN'].apply(lambda isin: get_country_from_isin(isin))
+    print("Open Positions with Country:")
+    print(open_positions)
+
+    # Součet hodnot všech pozic
+    total_value = open_positions['Hodnota pozice'].sum()
+    print(f"Total Portfolio Value: {total_value}")
+
+    # Pokud je hodnota portfolia nulová, vrátíme prázdné seznamy
+    if total_value == 0:
+        return [], []
+
+    # Skupinujeme podle země a vypočítáme celkovou hodnotu každé země
+    country_allocation = open_positions.groupby('Země')['Hodnota pozice'].sum().reset_index()
+    print("Country Allocation:")
+    print(country_allocation)
+
+    # Přidáme sloupec s procentuálním podílem na celkovém portfoliu
+    country_allocation['Procentuální podíl'] = (country_allocation['Hodnota pozice'] / total_value) * 100
+    print("Country Allocation with Percentages:")
+    print(country_allocation)
+
+    # Vrátíme seznam zemí a jejich odpovídající podíly
+    countries = country_allocation['Země'].tolist()
+    percentages = country_allocation['Procentuální podíl'].tolist()
+
+    return countries, percentages
+
+def calculate_stock_allocation(data):
+    """
+    Funkce, která vypočítá procentuální rozložení investic do jednotlivých akcií.
+
+    Parameters:
+    data (DataFrame): DataFrame obsahující transakce portfolia.
+
+    Returns:
+    tuple: Seznam tickerů a jejich odpovídajících procentuálních podílů v portfoliu.
+    """
+    # Vybereme otevřené pozice (počet > 0)
+    open_positions = data[data['Počet'] > 0].copy()
+    print("Open Positions (Stock Allocation):")
+    print(open_positions)
+
+    # Zkontrolujeme, jestli sloupec 'Ticker' existuje, pokud ne, přidáme ho pomocí převodu z ISIN
+    if 'Ticker' not in open_positions.columns:
+        open_positions['Ticker'] = open_positions['ISIN'].apply(get_ticker_from_isin)
+        open_positions['Ticker'].fillna('Unknown', inplace=True)  # Nahrazení chybějících tickerů hodnotou 'Unknown'
+    print("Open Positions with Ticker:")
+    print(open_positions)
+
+    # Přidáme sloupec s hodnotou každé pozice (počet akcií * cena)
+    open_positions['Hodnota pozice'] = open_positions['Počet'] * open_positions['Cena']
+    print("Open Positions with Position Value:")
+    print(open_positions)
+
+    # Součet hodnot všech pozic
+    total_value = open_positions['Hodnota pozice'].sum()
+    print(f"Total Portfolio Value: {total_value}")
+
+    # Pokud je hodnota portfolia nulová, vrátíme prázdné seznamy
+    if total_value == 0:
+        return [], []
+
+    # Skupinujeme podle tickeru a vypočítáme celkovou hodnotu každé akcie
+    allocation = open_positions.groupby('Ticker')['Hodnota pozice'].sum().reset_index()
+    print("Stock Allocation:")
+    print(allocation)
+
+    # Přidáme sloupec s procentuálním podílem na celkovém portfoliu
+    allocation['Procentuální podíl'] = (allocation['Hodnota pozice'] / total_value) * 100
+    print("Stock Allocation with Percentages:")
+    print(allocation)
+
+    # Vrátíme seznam tickerů a jejich odpovídající podíly
+    tickers = allocation['Ticker'].tolist()
+    percentages = allocation['Procentuální podíl'].tolist()
+
+    return tickers, percentages
+
+
+def get_top_investments(stock_info_list, top_n=5):
+    """
+    Vrací seznam top N investic seřazených podle profitu.
+
+    Args:
+        stock_info_list (list): Seznam slovníků s informacemi o akciích (ticker, kupní hodnota, aktuální hodnota, profit).
+        top_n (int): Počet nejlepších investic, které vrátíme.
+
+    Returns:
+        list: Seznam nejlepších investic podle profitu.
+    """
+    # Seřadíme podle profitu sestupně
+    sorted_investments = sorted(stock_info_list, key=lambda x: x['profit'], reverse=True)
+    # Vrátíme top N investic
+    return sorted_investments[:top_n]
