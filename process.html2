@@ -11,11 +11,11 @@
         <div class="card card-portfolio-value mb-4 p-3">
             <div class="card-header">HODNOTA PORTFOLIA</div>
             <div class="card-body">
-                <div id="portfolio_value" class="portfolio-amount">{{ results.portfolio_value }} </div>
+                <div id="portfolio_value" class="portfolio-amount">{{ results.portfolio_value }}</div>
                 <div class="card-subtitle">přepočítáno k {{ results.date }}</div>
                 <div class="inflation-block">
                     <div>Inflace: {{ results.inflation_rate }}</div>
-                    <div>Hodnota po inflaci: {{ results.portfolio_with_inflation }} </div>
+                    <div id="portfolio_with_inflation">Hodnota po inflaci: {{ results.portfolio_with_inflation }}</div>
                 </div>
             </div>
         </div>
@@ -25,7 +25,7 @@
             <div class="card-header">REALIZOVANÝ ZISK</div>
             <div class="card-body">
                 <span class="{{ 'profit-positive' if results.realized_profit|float > 0 else 'profit-negative' }}">
-                    {{ results.realized_profit }} 
+                    {{ results.realized_profit }}
                 </span>
                 <span>({{ results.realized_profit_percentage }}%)</span>
             </div>
@@ -48,8 +48,8 @@
         <div class="card card-dividends mb-4 p-3">
             <div class="card-header">DIVIDENDY</div>
             <div class="card-body">
-                <div>Výše: {{ results.total_dividends }} </div>
-                <div>Yeld: {{ results.dividend_yield }}</div>
+                <div>Výše: {{ results.total_dividends }}</div>
+                <div>Yield: {{ results.dividend_yield }}</div>
                 <div>Predikce na 10 let: {{ results.dividend_prediction_10_years }}</div>
                 <div>Daň: {{ results.tax_on_dividends }}</div>
             </div>
@@ -59,7 +59,7 @@
         <div class="card card-invested mb-4 p-3">
             <div class="card-header">INVESTOVANÁ ČÁSTKA</div>
             <div class="card-body">
-                <div>{{ results.invested }} </div>
+                <div>{{ results.invested }}</div>
             </div>
         </div>
 
@@ -67,7 +67,7 @@
         <div class="card card-forex-impact mb-4 p-3">
             <div class="card-header">MĚNOVÝ DOPAD</div>
             <div class="card-body">
-                <div>{{ results.forex_impact_czk }} </div>
+                <div>{{ results.forex_impact_czk }}</div>
                 <div>({{ results.forex_impact_percentage }}%)</div>
             </div>
         </div>
@@ -76,7 +76,7 @@
         <div class="card card-fees mb-4 p-3">
             <div class="card-header">POPLATKY</div>
             <div class="card-body">
-                <div>{{ results.total_fees }} </div>
+                <div>{{ results.total_fees }}</div>
                 <div>({{ results.fees_percentage }}%)</div>
             </div>
         </div>
@@ -87,7 +87,9 @@
 <div class="row justify-content-center mt-5">
     <div class="col-md-8">
         <h4 class="text-center mb-3">Graf rozložení jednotlivých pozic</h4>
-        <canvas id="positionInvestmentChart" style="margin-bottom: 50px;"></canvas> <!-- Místo pro graf jednotlivých akcií -->
+        <div class="chart-wrapper" style="position: relative; height:400px; width:400px;">
+            <canvas id="allocationChart" class="chart-canvas"></canvas>
+        </div>
     </div>
 </div>
 
@@ -129,93 +131,51 @@
     </div>
 </div>
 
-<!-- Skryté elementy pro předání dat do JS -->
-<div id="sectorChartLabels" style="display:none;">{{ stock_labels | default([]) | tojson }}</div>
-<div id="sectorChartData" style="display:none;">{{ stock_percentages | default([]) | tojson }}</div>
-<div id="positionChartLabels" style="display:none;">{{ position_labels | default([]) | tojson }}</div>
-<div id="positionChartData" style="display:none;">{{ position_percentages | default([]) | tojson }}</div>
+<!-- Zobrazení sloupcového grafu pro top investice -->
+<div class="row justify-content-center mt-5">
+    <div class="col-md-8">
+        <h4 class="text-center mb-3">Top Investice Podle Profitu</h4>
+        <div class="chart-wrapper" style="position: relative; height:400px; width:600px;">
+            <canvas id="topInvestmentChart" class="chart-canvas"></canvas>
+        </div>
+    </div>
 </div>
 
-<!-- Připojení externího JS souboru -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-document.addEventListener("DOMContentLoaded", function() {
-    // Skrýt hodnotu s inflací při načtení stránky
-    document.getElementById('portfolio_with_inflation').style.display = 'none';
+<!-- Zobrazení koláčového grafu pro alokaci podle sektorů -->
+<div class="row justify-content-center mt-5">
+    <div class="col-md-8">
+        <h4 class="text-center mb-3">Rozložení Podle Sektorů</h4>
+        <div class="chart-wrapper" style="position: relative; height:400px; width:400px;">
+            <canvas id="sectorAllocationChart" class="chart-canvas"></canvas>
+        </div>
+    </div>
+</div>
 
-    // Přepínání mezi hodnotou portfolia s inflací a bez
-    let showInflation = false;
+<!-- Zobrazení koláčového grafu pro alokaci zemí -->
+<div class="row justify-content-center mt-5">
+    <div class="col-md-8">
+        <h4 class="text-center mb-3">Rozložení Podle Zemí</h4>
+        <div class="chart-wrapper" style="position: relative; height:400px; width:400px;">
+            <canvas id="countryAllocationChart" class="chart-canvas"></canvas>
+        </div>
+    </div>
+</div>
 
-    window.toggleInflation = function() {
-        showInflation = !showInflation;
-        const portfolioValue = document.getElementById('portfolio_value');
-        const portfolioWithInflation = document.getElementById('portfolio_with_inflation');
-        
-        if (showInflation) {
-            portfolioValue.style.display = 'none';
-            portfolioWithInflation.style.display = 'block';
-        } else {
-            portfolioValue.style.display = 'block';
-            portfolioWithInflation.style.display = 'none';
-        }
-    }
+<!-- Skryté elementy pro předání dat do JS -->
+<div id="topInvestmentLabels" style="display:none;">
+    {{ results.top_investments | map(attribute='ticker') | list | tojson }}
+</div>
+<div id="topInvestmentProfits" style="display:none;">
+    {{ results.top_investments | map(attribute='profit') | list | tojson }}
+</div>
 
-    // Graf sektorů
-    var ctxSector = document.getElementById('sectorInvestmentChart').getContext('2d');
-    var sectorLabels = JSON.parse(document.getElementById('sectorChartLabels').textContent || '[]');
-    var sectorData = JSON.parse(document.getElementById('sectorChartData').textContent || '[]');
-
-    // Definice barev
-    var backgroundColors = [
-        'rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)', 'rgba(255, 206, 86, 0.2)', 
-        'rgba(75, 192, 192, 0.2)', 'rgba(153, 102, 255, 0.2)', 'rgba(255, 159, 64, 0.2)',
-        'rgba(199, 199, 199, 0.2)', 'rgba(255, 99, 71, 0.2)', 'rgba(144, 238, 144, 0.2)',
-        'rgba(173, 216, 230, 0.2)'
-    ];
-
-    var borderColors = [
-        'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)', 'rgba(255, 206, 86, 1)', 
-        'rgba(75, 192, 192, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)',
-        'rgba(199, 199, 199, 1)', 'rgba(255, 99, 71, 1)', 'rgba(144, 238, 144, 1)', 
-        'rgba(173, 216, 230, 1)'
-    ];
-
-    // Vykreslení grafu sektorů
-    var sectorInvestmentChart = new Chart(ctxSector, {
-        type: 'pie',
-        data: {
-            labels: sectorLabels,
-            datasets: [{
-                label: 'Procento zainvestováno',
-                data: sectorData,
-                backgroundColor: backgroundColors.slice(0, sectorData.length),
-                borderColor: borderColors.slice(0, sectorData.length),
-                borderWidth: 1
-            }]
-        }
-    });
-
-    // Graf jednotlivých akcií
-    var ctxPosition = document.getElementById('positionInvestmentChart').getContext('2d');
-    var positionLabels = JSON.parse(document.getElementById('positionChartLabels').textContent || '[]');
-    var positionData = JSON.parse(document.getElementById('positionChartData').textContent || '[]');
-
-    // Vykreslení grafu jednotlivých akcií
-    var positionInvestmentChart = new Chart(ctxPosition, {
-        type: 'pie',
-        data: {
-            labels: positionLabels,
-            datasets: [{
-                label: 'Procento zainvestováno do jednotlivých akcií',
-                data: positionData,
-                backgroundColor: backgroundColors.slice(0, positionData.length),
-                borderColor: borderColors.slice(0, positionData.length),
-                borderWidth: 1
-            }]
-        }
-    });
-});
-</script>
+<!-- Skryté elementy pro předání dat do JS -->
+<div id="stockLabelsData" style="display:none;">{{ stock_labels | default([]) | tojson }}</div>
+<div id="stockPercentagesData" style="display:none;">{{ stock_percentages | default([]) | tojson }}</div>
+<div id="countryLabelsData" style="display:none;">{{ country_labels | default([]) | tojson }}</div>
+<div id="countryPercentagesData" style="display:none;">{{ country_percentages | default([]) | tojson }}</div>
+<div id="sectorLabelsData" style="display:none;">{{ sector_labels | default([]) | tojson }}</div>
+<div id="sectorPercentagesData" style="display:none;">{{ sector_percentages | default([]) | tojson }}</div>
 
 <script id="chartData" type="application/json">
 {
@@ -224,9 +184,14 @@ document.addEventListener("DOMContentLoaded", function() {
 }
 </script>
 
-<canvas id="portfolioChart"></canvas>
+<canvas id="portfolioChart" class="chart-canvas"></canvas>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{{ url_for('static', filename='js/portfolio_charts.js') }}"></script>
+
+<!-- Připojení externího JS souboru -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script src="{{ url_for('static', filename='js/portfolio_charts.js') }}"></script>
+
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 {% endblock %}
