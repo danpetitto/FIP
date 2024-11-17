@@ -317,6 +317,8 @@ def select_portfolio(portfolio_id):
      # Inicializace proměnných s výchozími hodnotami
     country_labels = []
     country_percentages = []
+    sector_labels = []
+    sector_percentages = []
 
     # Pokud nejsou výsledky zastaralé a jsou již vypočítány, použij uložené hodnoty
     if not portfolio.needs_recalculation() and portfolio.calculated_results:
@@ -329,6 +331,8 @@ def select_portfolio(portfolio_id):
         investment_duration = results.get("investment_duration")
         country_labels = results.get("country_labels", [])
         country_percentages = results.get("country_percentages", [])
+        sector_labels = results.get("sector_labels", [])
+        sector_percentages = results.get("sector_percentages", [])
     else:
         # Čtení a zpracování dat z CSV
         csv_data = BytesIO(portfolio.data)
@@ -379,6 +383,12 @@ def select_portfolio(portfolio_id):
         inflation_rate = get_czech_inflation_2024()
         portfolio_with_inflation = calculate_portfolio_with_inflation(portfolio_value, inflation_rate)
 
+        # Přidání sektoru pro každou otevřenou pozici
+        open_positions['Sektor'] = open_positions['ISIN'].apply(lambda isin: get_sector_from_isin(isin))
+
+        # Skupinování podle sektorů a výpočet celkové hodnoty každého sektoru
+        sector_allocation = open_positions.groupby('Sektor')['Hodnota pozice'].sum().reset_index()
+
         # Výpočet alokace podle akcií
         stock_labels, stock_percentages = calculate_stock_allocation(data)
 
@@ -387,6 +397,21 @@ def select_portfolio(portfolio_id):
 
         # Výběr top investic podle profitu
         top_investments = get_top_investments(stock_info_list)
+
+         # Výpočet procentuálního podílu každého sektoru
+        total_value = open_positions['Hodnota pozice'].sum()
+        if total_value > 0:
+            sector_allocation['Procentuální podíl'] = (sector_allocation['Hodnota pozice'] / total_value) * 100
+        else:
+            sector_allocation['Procentuální podíl'] = 0
+
+        # Převod na seznamy pro použití v grafu
+        sector_labels = sector_allocation['Sektor'].tolist()
+        sector_percentages = sector_allocation['Procentuální podíl'].tolist()
+
+        # Debug výpis pro kontrolu dat pro sektorový graf
+        print(f"DEBUG: sector_labels: {sector_labels}")
+        print(f"DEBUG: sector_percentages: {sector_percentages}")
 
         # Uložení výsledků
         results = {
@@ -418,7 +443,9 @@ def select_portfolio(portfolio_id):
             'stock_labels': stock_labels,
             'stock_percentages': stock_percentages,
             'country_labels': country_labels,
-            'country_percentages': country_percentages
+            'country_percentages': country_percentages,
+            'sector_labels': sector_labels,
+            'sector_percentages': sector_percentages
         }
 
         # Uložení do databáze
@@ -440,9 +467,10 @@ def select_portfolio(portfolio_id):
         portfolio_dates=portfolio_dates,
         portfolio_values=portfolio_values,
         country_labels=country_labels,  # Přidáno
-        country_percentages=country_percentages
+        country_percentages=country_percentages,
+        sector_labels=sector_labels,
+        sector_percentages=sector_percentages
     )
-
 
 # Route pro zobrazení detailů investic
 @portfolio_bp.route('/investment_details', methods=['GET'])
@@ -1294,3 +1322,131 @@ def get_top_investments(stock_info_list, top_n=5):
     sorted_investments = sorted(stock_info_list, key=lambda x: x['profit'], reverse=True)
     # Vrátíme top N investic
     return sorted_investments[:top_n]
+
+import requests
+import json
+import os
+import pandas as pd
+import yfinance as yf
+
+def get_ticker_from_isin(isin):
+    """
+    Získá ticker na základě ISIN pomocí OpenFIGI API.
+    """
+    # Načtení API klíče z proměnného prostředí
+    api_key = os.getenv('OPENFIGI_API_KEY')
+    if not api_key:
+        print("Chyba: OPENFIGI_API_KEY není nastaven v prostředí.")
+        return None
+
+    headers = {
+        'Content-Type': 'application/json',
+        'X-OPENFIGI-APIKEY': api_key  # Použití klíče z prostředí
+    }
+
+    # Připravíme payload s ISIN
+    payload = [{"idType": "ID_ISIN", "idValue": isin}]
+    
+    try:
+        # Pošleme POST request na OpenFIGI API
+        response = requests.post("https://api.openfigi.com/v3/mapping", headers=headers, data=json.dumps(payload))
+        response.raise_for_status()  # Pokud dojde k chybě, raise error
+        
+        data = response.json()
+
+        # Debug výpis pro kontrolu odpovědi API
+        print(f"DEBUG: OpenFIGI API response: {data}")
+
+        # Kontrola, zda jsme dostali data
+        if data and 'data' in data[0] and data[0]['data']:
+            ticker = data[0]['data'][0].get('ticker', None)
+            return ticker
+        else:
+            return None
+
+    except requests.exceptions.RequestException as e:
+        print(f"Chyba při komunikaci s OpenFIGI API: {e}")
+        return None
+
+def get_sector_from_isin(isin):
+    """
+    Získá sektor na základě ISIN tím, že nejdříve získá ticker a poté použije Yahoo Finance.
+    """
+    ticker = get_ticker_from_isin(isin)
+    if not ticker:
+        return 'Unknown Sector'
+
+    return get_sector_from_ticker(ticker)
+
+def get_sector_from_ticker(ticker):
+    """
+    Získá sektor na základě tickeru pomocí Yahoo Finance.
+    """
+    try:
+        # Použití knihovny yfinance k získání dat o společnosti
+        stock = yf.Ticker(ticker)
+        info = stock.info
+
+        # Debug výpis pro kontrolu informací o společnosti
+        print(f"DEBUG: Informace o společnosti pro ticker {ticker}: {info}")
+
+        # Získání sektoru, pokud je dostupný
+        sector = info.get('sector', 'Unknown Sector')
+        print(f"DEBUG: Sektor pro ticker {ticker}: {sector}")
+        return sector
+    except Exception as e:
+        print(f"Chyba při získávání sektoru z Yahoo Finance pro ticker {ticker}: {e}")
+        return 'Unknown Sector'
+
+def calculate_sector_allocation(data):
+    """
+    Funkce, která vypočítá procentuální rozložení investic do různých sektorů.
+
+    Parameters:
+    data (DataFrame): DataFrame obsahující transakce portfolia.
+
+    Returns:
+    tuple: Seznam sektorů a jejich odpovídajících procentuálních podílů v portfoliu.
+    """
+    # Vybereme otevřené pozice (počet > 0)
+    open_positions = data[data['Počet'] > 0].copy()
+    open_positions['Hodnota pozice'] = open_positions['Počet'] * open_positions['Cena']
+
+    # Debug výpis pro kontrolu otevřených pozic
+    print("DEBUG: Otevřené pozice:")
+    print(open_positions)
+
+    # Přidáme sloupec se sektorem na základě ISIN
+    open_positions['Sektor'] = open_positions['ISIN'].apply(lambda isin: get_sector_from_isin(isin))
+
+    # Debug výpis pro kontrolu pozic se sektory
+    print("DEBUG: Otevřené pozice se sektory:")
+    print(open_positions)
+
+    # Součet hodnot všech pozic
+    total_value = open_positions['Hodnota pozice'].sum()
+    print(f"DEBUG: Celková hodnota portfolia: {total_value}")
+
+    # Pokud je hodnota portfolia nulová, vrátíme prázdné seznamy
+    if total_value == 0:
+        return [], []
+
+    # Skupinujeme podle sektoru a vypočítáme celkovou hodnotu každého sektoru
+    sector_allocation = open_positions.groupby('Sektor')['Hodnota pozice'].sum().reset_index()
+
+    # Debug výpis pro kontrolu alokace sektorů
+    print("DEBUG: Alokace sektorů:")
+    print(sector_allocation)
+
+    # Přidáme sloupec s procentuálním podílem na celkovém portfoliu
+    sector_allocation['Procentuální podíl'] = (sector_allocation['Hodnota pozice'] / total_value) * 100
+
+    # Debug výpis pro kontrolu alokace sektorů s procenty
+    print("DEBUG: Alokace sektorů s procentuálními podíly:")
+    print(sector_allocation)
+
+    # Vrátíme seznam sektorů a jejich odpovídající podíly
+    sectors = sector_allocation['Sektor'].tolist()
+    percentages = sector_allocation['Procentuální podíl'].tolist()
+
+    return sectors, percentages
