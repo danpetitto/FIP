@@ -151,6 +151,10 @@
     </div>
 </div>
 
+<!-- Skryté elementy pro předání dat do JS -->
+<div id="sectorLabelsData" style="display:none;">{{ sector_labels | default([]) | tojson }}</div>
+<div id="sectorPercentagesData" style="display:none;">{{ sector_percentages | default([]) | tojson }}</div>
+
 <!-- Zobrazení koláčového grafu pro alokaci zemí -->
 <div class="row justify-content-center mt-5">
     <div class="col-md-8">
