@@ -143,6 +143,12 @@ def get_stock(ticker):
         net_margin = stock.info.get('profitMargins', 'Data nejsou dostupná')
         estimated_growth_rate = stock.info.get('earningsGrowth', 0)
 
+        # Získání analytických cenových cílů
+        target_low = stock.info.get('targetLowPrice', 'Data nejsou dostupná')
+        target_high = stock.info.get('targetHighPrice', 'Data nejsou dostupná')
+        target_mean = stock.info.get('targetMeanPrice', 'Data nejsou dostupná')
+        current_price = stock.history(period='1d')['Close'].iloc[-1]
+
         # Formátování dat
         if gross_margin != 'Data nejsou dostupná':
             gross_margin = f"{gross_margin * 100:.2f} %"
@@ -165,13 +171,14 @@ def get_stock(ticker):
         market_cap = stock_data['results'].get('market_cap', 'Data nejsou dostupná')
         payout_years = get_dividend_payout_years(ticker)
 
-         # Získání loga
+        # Získání loga
         logo_url = get_logo_url(ticker)
 
         # Kombinace a zobrazení dat
         return render_stock_data(
             stock_name, market_cap, delayed_price, pe_ratio, eps, gross_margin, operating_margin,
-            net_margin, ev_to_ebitda, ebitda, roe, dividend_data, payout_years, intrinsic_value, ticker, logo_url
+            net_margin, ev_to_ebitda, ebitda, roe, dividend_data, payout_years, intrinsic_value, ticker, logo_url,
+            target_low, target_high, target_mean, current_price
         )
 
     except requests.exceptions.HTTPError as err:
@@ -188,10 +195,10 @@ def get_stock(ticker):
         logging.error(f'Něco se pokazilo: {err}')
         return render_template('stocks.html', error=f'Něco se pokazilo: {err}', ticker=ticker)
 
-
 # Funkce pro kombinování dat a renderování šablony
 def render_stock_data(stock_name, market_cap, delayed_price, pe_ratio, eps, gross_margin, operating_margin,
-                      net_margin, ev_to_ebitda, ebitda, roe, dividend_data, payout_years, intrinsic_value, ticker, logo_url):
+                      net_margin, ev_to_ebitda, ebitda, roe, dividend_data, payout_years, intrinsic_value, ticker, logo_url,
+                      target_low, target_high, target_mean, current_price):
     stock_data_combined = {
         'name': stock_name,
         'market_cap': market_cap,
@@ -208,9 +215,98 @@ def render_stock_data(stock_name, market_cap, delayed_price, pe_ratio, eps, gros
         'dividend_yield': dividend_data.get('dividend_yield', 'Data nejsou dostupná'),
         'dividend_payout_years': payout_years,
         'intrinsic_value': intrinsic_value,
-        'logo': logo_url
+        'logo': logo_url,
+        'target_low': target_low,
+        'target_high': target_high,
+        'target_mean': target_mean,
+        'current_price_analyst': current_price
     }
     return render_template('stocks.html', stock=stock_data_combined, ticker=ticker)
+
+@stock_bp.route('/stock/analyst_recommendations/<ticker>', methods=['GET'])
+def get_analyst_recommendations(ticker):
+    try:
+        # Načtení dat o doporučeních analytiků
+        stock = yf.Ticker(ticker)
+        recommendations = stock.recommendations
+
+        if recommendations is None or recommendations.empty:
+            raise ValueError("Data o doporučeních nejsou dostupná.")
+
+        # Agregace doporučení podle typu (Strong Buy, Buy, Hold, Underperform, Sell)
+        recommendations_count = recommendations['To Grade'].value_counts().to_dict()
+        
+        # Výsledná data - zajistíme, že jsou zde všechny kategorie (i ty s nulovým počtem)
+        categories = ["Strong Buy", "Buy", "Hold", "Underperform", "Sell"]
+        recommendations_summary = {category: recommendations_count.get(category, 0) for category in categories}
+
+        logging.info(f"Doporučení analytiků pro {ticker}: {recommendations_summary}")
+        
+        return jsonify(recommendations_summary)
+
+    except ValueError as e:
+        logging.error(f"Chyba při získávání doporučení analytiků pro {ticker}: {e}")
+        return jsonify({'error': str(e)}), 404
+    except Exception as e:
+        logging.error(f"Neočekávaná chyba při získávání doporučení analytiků pro {ticker}: {e}")
+        return jsonify({'error': 'Neočekávaná chyba při získávání dat.'}), 500
+
+# Route pro získání analytických cenových cílů pro daný ticker
+@stock_bp.route('/price_targets/<ticker>', methods=['GET'])
+def get_price_targets_route(ticker):
+    data = get_price_targets(ticker)
+    return jsonify(data)
+
+# Funkce pro získání cenových cílů a aktuální ceny z Yahoo Finance
+def get_price_targets(ticker):
+    try:
+        stock = yf.Ticker(ticker)
+        
+        # Získání analytických cenových cílů z Yahoo Finance
+        stock_info = stock.info
+        if not stock_info:
+            raise ValueError("Data nejsou dostupná pro zadaný ticker.")
+        
+        target_low = stock_info.get('targetLowPrice', 'Data nejsou dostupná')
+        target_high = stock_info.get('targetHighPrice', 'Data nejsou dostupná')
+        target_mean = stock_info.get('targetMeanPrice', 'Data nejsou dostupná')
+        
+        # Ověření, že data jsou dostupná a aktuální cena je validní
+        stock_history = stock.history(period='1d')
+        if stock_history.empty:
+            raise ValueError("Historická data nejsou dostupná pro zadaný ticker.")
+        
+        current_price = stock_history['Close'].iloc[-1]
+        
+        # Výpis informací o úspěšném načtení dat
+        logging.info(f"Analytické cenové cíle pro {ticker}: Low: {target_low}, High: {target_high}, Mean: {target_mean}, Current: {current_price}")
+        print(f"Analytické cenové cíle pro {ticker}: Low: {target_low}, High: {target_high}, Mean: {target_mean}, Current: {current_price}")
+        
+        return {
+            'target_low': target_low,
+            'target_high': target_high,
+            'target_mean': target_mean,
+            'current_price_analyst': current_price
+        }
+    except ValueError as e:
+        logging.error(f"Chyba při získávání cenových cílů pro {ticker}: {e}")
+        print(f"Chyba při získávání cenových cílů pro {ticker}: {e}")
+        return {
+            'target_low': 'Data nejsou dostupná',
+            'target_high': 'Data nejsou dostupná',
+            'target_mean': 'Data nejsou dostupná',
+            'current_price_analyst': 'Data nejsou dostupná'
+        }
+    except Exception as e:
+        logging.error(f"Neočekávaná chyba při získávání cenových cílů pro {ticker}: {e}")
+        print(f"Neočekávaná chyba při získávání cenových cílů pro {ticker}: {e}")
+        return {
+            'target_low': 'Data nejsou dostupná',
+            'target_high': 'Data nejsou dostupná',
+            'target_mean': 'Data nejsou dostupná',
+            'current_price_analyst': 'Data nejsou dostupná'
+        }
+    
 
 # Funkce pro zpracování chyb z API
 def handle_api_error(err, ticker):
