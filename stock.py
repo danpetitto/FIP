@@ -110,6 +110,10 @@ def get_moodys_aaa_yield():
         logging.error(f"Error fetching Moody's Aaa Corporate Bond Yield: {e}")
         return 3.5
 
+# Funkce pro získání loga pomocí Clearbit
+def get_logo_url(ticker):
+    return f'https://logo.clearbit.com/{ticker.lower()}.com'
+
 # Route pro získání dat o akciích
 @stock_bp.route('/stocks/<ticker>', methods=['GET'])
 def get_stock(ticker):
@@ -161,10 +165,13 @@ def get_stock(ticker):
         market_cap = stock_data['results'].get('market_cap', 'Data nejsou dostupná')
         payout_years = get_dividend_payout_years(ticker)
 
+         # Získání loga
+        logo_url = get_logo_url(ticker)
+
         # Kombinace a zobrazení dat
         return render_stock_data(
             stock_name, market_cap, delayed_price, pe_ratio, eps, gross_margin, operating_margin,
-            net_margin, ev_to_ebitda, ebitda, roe, dividend_data, payout_years, intrinsic_value, ticker
+            net_margin, ev_to_ebitda, ebitda, roe, dividend_data, payout_years, intrinsic_value, ticker, logo_url
         )
 
     except requests.exceptions.HTTPError as err:
@@ -184,7 +191,7 @@ def get_stock(ticker):
 
 # Funkce pro kombinování dat a renderování šablony
 def render_stock_data(stock_name, market_cap, delayed_price, pe_ratio, eps, gross_margin, operating_margin,
-                      net_margin, ev_to_ebitda, ebitda, roe, dividend_data, payout_years, intrinsic_value, ticker):
+                      net_margin, ev_to_ebitda, ebitda, roe, dividend_data, payout_years, intrinsic_value, ticker, logo_url):
     stock_data_combined = {
         'name': stock_name,
         'market_cap': market_cap,
@@ -200,7 +207,8 @@ def render_stock_data(stock_name, market_cap, delayed_price, pe_ratio, eps, gros
         'annual_dividend_per_share': dividend_data.get('annual_dividend_per_share', 'Data nejsou dostupná'),
         'dividend_yield': dividend_data.get('dividend_yield', 'Data nejsou dostupná'),
         'dividend_payout_years': payout_years,
-        'intrinsic_value': intrinsic_value
+        'intrinsic_value': intrinsic_value,
+        'logo': logo_url
     }
     return render_template('stocks.html', stock=stock_data_combined, ticker=ticker)
 
@@ -384,6 +392,7 @@ def stock_chart_data(ticker):
     except Exception as e:
         logging.error(f"Chyba při načítání dat pro graf: {e}")
         return jsonify({'error': 'Nepodařilo se načíst data pro graf'}), 500
+    
     
 
 import os
