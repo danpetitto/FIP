@@ -1,6 +1,6 @@
- /* Základní stylování */
- body {
-    background-color: #181729; /* Barva hlavního pozadí */
+/* Základní stylování */
+body {
+    background-color: #ffffff; /* Barva hlavního pozadí */
     color: #f5f5f6; /* Světlejší barva textu */
     font-family: "Simple", Arial, sans-serif;
     margin: 0;
@@ -13,7 +13,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 20px;
-    background-color: #171628; /* Barva horního navbaru */
+    background-color: #000000; /* Barva horního navbaru */
     position: fixed;
     top: 0;
     left: 0;
@@ -42,10 +42,13 @@
     color: #f5f5f6;
 }
 
+
+
+
 /* Boční navigační panel */
 .sidebar {
     width: 200px;
-    background-color: #3127f7; /* Barva bočního panelu */
+    background-color: #ce0000; /* Barva bočního panelu */
     padding-top: 80px; /* Odsazení kvůli hornímu navbaru */
     position: fixed;
     top: 0;
@@ -63,22 +66,27 @@
 }
 
 .sidebar .nav-link.active, .sidebar .nav-link:hover {
-    background-color: #2A2E38;
-    color: #5A5FFF;
+    background-color: #000000;
+    color: #ff2020;
 }
 
 /* Hlavní obsah */
 .main-content {
-    margin-left: 200px; /* Odsazení hlavního obsahu kvůli sidebaru */
-    padding-top: 80px; /* Odsazení kvůli hornímu navbaru */
-    background-color: #181729;
+    margin: 0 auto; /* Zarovnání na střed */
+    padding-top: 80px;
     padding: 30px;
+    background-color: #3e35df;
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Horizontální zarovnání na střed */
+    justify-content: flex-start; /* Vertikální zarovnání nahoru */
+    min-height: calc(100vh - 80px); /* Zajistí, že obsah bude vycentrovaný na stránce */
 }
 
 /* Úvodní text */
 .main-title {
     font-size: 2rem;
-    color: #C3C5C9;
+    color: #0457fd;
     margin-bottom: 10px;
 }
 
@@ -177,7 +185,7 @@
 }
 
 .premium-check {
-    background-color: #2E3242;
+    background-color: #fdfdff;
 }
 
 .ai-check {
@@ -198,7 +206,7 @@
 
 /* Tlačítka pro jednotlivé funkce */
 .view-all-btn {
-    background-color: #2A2E38;
+    background-color: #ffffff;
     color: #f5f5f6;
     text-align: center;
     display: block;
@@ -209,7 +217,7 @@
 }
 
 .ai-view-btn {
-    background-color: #20232A;
+    background-color: #ff0ade;
     color: #f5f5f6;
     text-align: center;
     display: block;
@@ -222,7 +230,7 @@
 /* Základní styl pro tabulky */
 .table {
     color: #f5f5f6;
-    background-color: #20232A;
+    background-color: #c8d8ff;
     border: 1px solid #2E3242;
     margin-top: 15px;
 }
@@ -238,7 +246,7 @@
 }
 
 .table-hover tbody tr:hover {
-    background-color: #2A2E38;
+    background-color: #bed0ff;
 }
 
 /* Spodní slogan */
@@ -257,8 +265,6 @@
 .highlight {
     color: #5A5FFF;
 }
-
-
 
 /*Ikony v aplikaci*/
 
@@ -288,7 +294,6 @@
     transform: scale(1.2); /* Zvětší ikonu o 20 % */
 }
 
-
 /* Styl pro ikonu fondu */
 .fund-icon {
     width: 50px; /* Nastavte požadovanou šířku ikony */
@@ -301,6 +306,19 @@
     transform: scale(1.2); /* Zvětší ikonu o 20 % */
 }
 
+/* Styl pro ikonu AI */
+.ai-icon {
+    width: 50px; /* Nastavte požadovanou šířku ikony */
+    height: 50px; /* Nastavte požadovanou výšku ikony */
+    display: inline-block;
+    transition: transform 0.2s; /* Animace pro efekt při najetí myší */
+}
+
+/* Zvětšení ikony při najetí myší */
+.ai-icon:hover {
+    transform: scale(1.2); /* Zvětší ikonu o 20 % */
+}
+ 
 
 /* Styl pro sidebar odkazy */
 .sidebar-link {
@@ -313,8 +331,8 @@
 }
 
 .sidebar-link:hover {
-    background-color: #2A2E38; /* Zvýraznění pozadí při najetí myší */
-    color: #5A5FFF; /* Zvýrazněná barva textu při najetí myší */
+    background-color: #e0e9ff; /* Zvýraznění pozadí při najetí myší */
+    color: #cbccec; /* Zvýrazněná barva textu při najetí myší */
 }
 
 /* Styl pro ikony v sidebaru */
@@ -324,13 +342,12 @@
     margin-right: 10px; /* Mezera mezi ikonou a textem */
 }
 
-
-
+/* Zbytek původního kódu byl zachován včetně všech stylů pro formuláře, tlačítka a další prvky */
 
 
 /* Základní stylování */
 body {
-    background-color: #181729;
+    background-color: #ffffff;
     color: #f5f5f6;
     font-family: "Simple", Arial, sans-serif;
 }
@@ -349,7 +366,7 @@ body {
 
 /* Karta s informacemi o akcii */
 .info-card {
-    background-color: #1c1b2f;
+    background-color: #ffffff;
     color: #f5f5f6;
     border-radius: 12px;
     padding: 20px;
@@ -381,7 +398,7 @@ body {
 
 /* Globální stylování */
 body {
-    background-color: #181729;
+    background-color: #ffffff;
     color: #f5f5f6;
     font-family: "Inter", Arial, sans-serif;
     margin: 0;
@@ -406,7 +423,7 @@ body {
     align-items: center;
     justify-content: space-between;
     padding: 20px;
-    background-color: #171628;
+    background-color: #ffffff;
     position: fixed;
     top: 0;
     left: 0;
@@ -430,7 +447,7 @@ body {
 
 /* Styl pro sekci nahrání portfolia */
 .upload-card {
-    background-color: #1c1b2f;
+    background-color: #ffffff;
     border-radius: 8px;
     color: #f5f5f6;
     width: 100%; 
@@ -582,7 +599,7 @@ h2 {
     align-items: center;
     justify-content: space-between;
     padding: 20px;
-    background-color: #171628;
+    background-color: #000000; /* Změna na černou barvu */
     position: fixed;
     top: 0;
     left: 0;
@@ -607,13 +624,13 @@ h2 {
     border-radius: 5px;
     text-decoration: none;
     font-weight: bold;
-    color: #f5f5f6;
+    color: #f5f5f6; /* Světle šedá pro kontrast s černým pozadím */
 }
 
 /* Sidebar */
 .sidebar {
     width: 200px;
-    background-color: #3127f7;
+    background-color: #000000; /* Změna na černou barvu */
     padding-top: 80px;
     position: fixed;
     top: 0;
@@ -633,22 +650,35 @@ h2 {
 
 .sidebar .nav-link.active,
 .sidebar .nav-link:hover {
-    background-color: #2A2E38;
-    color: #5A5FFF;
+    background-color: #1A1A1A; /* Tmavě šedá pro zvýraznění aktivního odkazu */
+    color: #5A5FFF; /* Zvýrazněná modrá barva textu */
 }
+
+
+
 
 /* Hlavní obsah */
 .main-content {
     margin-left: 200px;
-    padding-top: 80px;
-    padding: 30px;
+    padding-top: 0; /* Snížení prostoru pod navbar na minimum */
+    padding-left: 30px; /* Zmenšení levého paddingu pro přiblížení obsahu vlevo */
+    padding-right: 30px;
     background-color: #181729;
 }
 
+/* Kontejner */
 .container {
-    padding-top: 80px;
     max-width: 1200px;
     margin: 0 auto;
+    padding: 0; /* Odstranění paddingu, aby se obsah přiblížil co nejvíce */
+}
+
+/* Nadpis přehled - zarovnání vlevo a přiblížení k hornímu navbaru */
+h2.text-center {
+    text-align: left;
+    margin: 0; /* Odstranění veškerých marginů */
+    padding-top: 0; /* Přiblížení nadpisu k horní části obsahu */
+    padding-bottom: 10px; /* Mírné odsazení pod nadpisem */
 }
 
 /* Mřížkové rozvržení pro hlavní obsah */
@@ -657,6 +687,7 @@ h2 {
     grid-template-columns: 1fr 1fr;
     grid-template-rows: auto auto auto;
     gap: 20px;
+    margin-top: 0; /* Odstranění mezery nad grid layoutem */
 }
 
 /* Specifické styly pro všechny karty */
@@ -667,6 +698,29 @@ h2 {
     background-color: #1c1b2f;
     text-transform: uppercase;
     font-weight: 500;
+    margin-top: 0; /* Odstranění horní mezery pro co největší přiblížení karet */
+    transition: transform 0.3s ease, box-shadow 0.3s ease; /* Přidání plynulého přechodu pro transformaci a stín */
+    box-shadow: none; /* Odstranění výchozího stínu */
+    border: none; /* Odstranění jakéhokoli ohraničení */
+    outline: none; /* Odstranění jakéhokoliv outline */
+}
+
+/* Efekt při najetí myší na kartu */
+.card:hover {
+    transform: translateY(-10px); /* Posunutí karty nahoru při najetí myší */
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); /* Zvýraznění stínu při najetí myší */
+}
+
+/* Nadpisy karet (kromě Hodnoty portfolia) - barva #525072 a odstranění hrany */
+.card-header {
+    color: #525072;
+    border: none; /* Odstranění všech hran */
+    border-bottom: none; /* Odstranění spodního okraje, pokud ho karta měla */
+    outline: none; /* Odstranění outline */
+    padding-bottom: 10px; /* Zmenšení paddingu pro čistší vzhled */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 /* Styl pro list-group-item v Nerealizovaném zisku */
@@ -678,17 +732,20 @@ h2 {
 
 /* Karta Hodnota portfolia */
 .card-portfolio-value {
-    background-color: #33b6ff;
+    background-color: #892aa7;
     grid-row: span 2; /* Roztažení na dva řádky */
     display: flex;
     flex-direction: column;
     justify-content: space-between;
+    border: none; /* Odstranění všech hran */
+    box-shadow: none; /* Odstranění box-shadow */
+    outline: none; /* Odstranění outline */
 }
 
 .card-portfolio-value .portfolio-amount {
     font-size: 2rem;
     font-weight: 700;
-    color: #ffffff;
+    color: #ffffff; /* Změněna barva na bílou */
 }
 
 .card-portfolio-value .card-subtitle {
@@ -699,7 +756,7 @@ h2 {
 
 /* Inflace - menší blok textu */
 .inflation-block {
-    margin-top: 15px;
+    margin-top: 10px; /* Snížení mezery pro přiblížení */
     font-size: 0.9rem;
     color: #a3a1b1;
 }
@@ -709,21 +766,24 @@ h2 {
 .card-unrealized-profit {
     background-color: #1c1b2f;
     height: 100%;
+    border: none; /* Odstranění všech hran */
+    box-shadow: none; /* Odstranění box-shadow */
+    outline: none; /* Odstranění outline */
 }
 
 .card-realized-profit .profit-value,
 .card-unrealized-profit .profit-value {
     font-weight: bold;
-    font-size: 1.2rem;
+    font-size: 2rem; /* Zvýšená velikost písma */
 }
 
 /* Dynamické barvy pro profit (zelená pro pozitivní, červená pro negativní hodnoty) */
 .profit-positive {
-    color: #4caf50; /* Jemná zelená pro pozitivní hodnoty */
+    color: #af4c4c; /* Jemná zelená pro pozitivní hodnoty */
 }
 
 .profit-negative {
-    color: #f44336; /* Jemná červená pro negativní hodnoty */
+    color: #10ee53; /* Jemná červená pro negativní hodnoty */
 }
 
 /* Karta dividendy */
@@ -731,21 +791,44 @@ h2 {
     background-color: #1c1b2f;
     grid-column: span 1;
     grid-row: span 2; /* Roztažení na dva řádky */
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around; /* Rozložení položek po celém bloku */
+    border: none; /* Odstranění všech hran */
+    box-shadow: none; /* Odstranění box-shadow */
+    outline: none; /* Odstranění outline */
+}
+
+.card-dividends .card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 20px; /* Větší rozestup mezi položkami */
+    flex-grow: 1; /* Roztažení obsahu po celém bloku */
 }
 
 /* Karta investovaná částka */
 .card-invested {
     background-color: #1c1b2f;
+    border: none; /* Odstranění všech hran */
+    box-shadow: none; /* Odstranění box-shadow */
+    outline: none; /* Odstranění outline */
 }
 
 /* Karta měnový dopad */
 .card-forex-impact {
     background-color: #1c1b2f;
+    border: none; /* Odstranění všech hran */
+    box-shadow: none; /* Odstranění box-shadow */
+    outline: none; /* Odstranění outline */
 }
 
 /* Karta poplatky */
 .card-fees {
     background-color: #9c3838;
+    border: none; /* Odstranění všech hran */
+    box-shadow: none; /* Odstranění box-shadow */
+    outline: none; /* Odstranění outline */
+    color: #ffffff; /* Změněna barva textu na bílou */
 }
 
 /* Nastavení velikosti písma pro hlavní hodnoty */
@@ -753,6 +836,46 @@ h2 {
     font-size: 1.8rem;
     font-weight: bold;
 }
+
+/* Zmenšení horního paddingu v hlavním obsahu pro blízkost k navbaru */
+.main-content {
+    padding-top: 0; /* Ještě více přiblíženo k hornímu okraji */
+}
+
+/* Zarovnání nadpisu "PŘEHLED" k levému okraji */
+h2.text-center {
+    text-align: left;
+    padding-left: 0; /* Odstranění paddingu pro přiblížení nadpisu vlevo */
+    margin-top: 0;
+    padding-top: 0;
+}
+
+/* Odkaz na dividendový kalendář - ikona šipky */
+.dividend-calendar-link .calendar-icon {
+    width: 48px; /* Zvýšená šířka obrázku */
+    height: auto;
+}
+
+/* Styl pro ikonu peněženky vedle nadpisu */
+.wallet-icon {
+    width: 48px; /* Zvýšená šířka obrázku */
+    height: auto;
+    margin-left: 10px;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* Styly pro tlačítka */
 .btn-primary, 
@@ -833,3 +956,95 @@ h2 {
 #toggleInflationBtn:hover {
     background-color: #20232A;
 }
+
+
+/* Styl pro odkazy v sidebaru */
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    color: #f5f5f6; /* Barva textu */
+    font-weight: bold;
+    padding: 20px 20px;
+    text-decoration: none;
+    transition: background-color 0.3s;
+}
+
+.sidebar-link:hover {
+    background-color: #2A2E38;
+    color: #5A5FFF;
+}
+
+/* Styl pro ikony v sidebaru */
+.sidebar-icon {
+    width: 60px; /* Nastavte požadovanou šířku ikony */
+    height: 60px; /* Nastavte požadovanou výšku ikony */
+    margin-right: 10px; /* Mezera mezi ikonou a textem */
+}
+
+
+
+
+.chart-canvas {
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1); /* Přidání stínu */
+    border-radius: 20px; /* Zakulacení okrajů plátna */
+    padding: 15px; /* Prostor kolem grafu */
+    background-color: #1c1b2f; /* Tmavé pozadí grafu, jak jsi požadoval */
+}
+
+/* Stylizace kontejneru grafu */
+.chart-wrapper {
+    background-color: #1c1b2f; /* Nastavení barvy pozadí na požadovanou hodnotu */
+    padding: 20px;
+    border-radius: 20px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2); /* Silný stín pro kontrast */
+}
+
+/* Styl pro popisky grafu a titulky */
+h4.text-center {
+    color: #c4befe;
+    font-family: 'Inter', Arial, sans-serif;
+    font-weight: 600;
+}
+
+/* Přidání efektu na hover */
+.chart-canvas:hover {
+    transform: scale(1.02);
+    transition: all 0.3s ease-in-out;
+}
+
+
+.chart-canvas {
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1); /* Přidání stínu */
+    border-radius: 20px; /* Zakulacení okrajů plátna */
+    padding: 15px; /* Prostor kolem grafu */
+    background-color: #1c1b2f; /* Tmavé pozadí grafu pro kontrast */
+    transition: transform 0.3s ease-in-out; /* Přidání animace pro hover */
+}
+
+/* Stylizace kontejneru grafu */
+.chart-wrapper {
+    background-color: #1c1b2f;
+    padding: 20px;
+    border-radius: 20px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2); /* Silný stín pro kontrast */
+    transition: transform 0.3s ease-in-out; /* Přidání animace pro hover */
+}
+
+/* Styl pro popisky grafu a titulky */
+h4.text-center {
+    color: #c4befe;
+    font-family: 'Inter', Arial, sans-serif;
+    font-weight: 600;
+}
+
+/* Přidání efektu na hover */
+.chart-canvas:hover {
+    transform: scale(1.05); /* Mírné zvětšení při hoveru */
+    transition: all 0.3s ease-in-out;
+}
+
+.chart-wrapper:hover {
+    transform: scale(1.03); /* Zvýraznění kontejneru při hoveru */
+    transition: all 0.3s ease-in-out;
+}
+
