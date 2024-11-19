@@ -1099,7 +1099,12 @@ def generate_ai_commentary(results, stock_info_list):
 
     
 
-def calculate_open_positions_portfolio_value(data):
+import pandas as pd
+import logging
+
+
+# Funkce pro výpočet hodnoty portfolia ke konci každého měsíce - pouze pro otevřené pozice
+def calculate_monthly_portfolio_values(data):
     # Převod datumu na datetime formát
     logging.debug("Převádím datumy na datetime formát")
     data['Datum'] = pd.to_datetime(data['Datum'], format='%d-%m-%Y', errors='coerce')
@@ -1113,43 +1118,49 @@ def calculate_open_positions_portfolio_value(data):
     data = data.sort_values(by='Datum')
     logging.debug(f"Data po seřazení podle datumu: \n{data.head()}")
 
-    # Skupinujeme podle ISIN a sečteme počet akcií (kladné = nákup, záporné = prodej)
-    position_summary = data.groupby('ISIN')['Počet'].sum().reset_index()
-    logging.debug(f"Shrnutí pozic podle ISIN: \n{position_summary}")
+    # Přidáme sloupec 'Month' pro identifikaci měsíce a roku
+    data['Month'] = data['Datum'].dt.to_period('M')
 
-    # Filtrujeme pouze otevřené pozice
-    open_positions_filtered = position_summary[position_summary['Počet'] > 0]
-    logging.debug(f"Otevřené pozice po filtraci: \n{open_positions_filtered}")
+    # Inicializace seznamů pro uchování dat a hodnot portfolia
+    dates = []
+    values = []
 
-    # Připojíme zpět k původnímu datasetu, abychom získali další informace (např. ticker)
-    open_positions = pd.merge(open_positions_filtered, data, on='ISIN', how='left')
-    logging.debug(f"Otevřené pozice s podrobnostmi: \n{open_positions}")
+    # Iterace přes jednotlivé měsíce v datech
+    for month, monthly_data in data.groupby('Month'):
+        # Skupinujeme podle ISIN a sečteme počet akcií (kladné = nákup, záporné = prodej)
+        position_summary = monthly_data.groupby('ISIN')['Počet'].sum().reset_index()
 
-    # Získání tickeru pro každou neprodanou pozici
-    open_positions['Ticker'] = open_positions['ISIN'].apply(get_ticker_from_isin)
+        # Filtrujeme pouze ISINy, které mají kladný součet (znamená to, že pozice jsou stále otevřené)
+        open_positions_filtered = position_summary[position_summary['Počet'] > 0]
 
-    # Získání aktuální ceny pro každou neprodanou pozici pomocí Polygon API
-    open_positions['Aktuální Cena'] = open_positions['Ticker'].apply(get_delayed_price_polygon)
+        # Připojíme zpět k původnímu datasetu, abychom získali další informace (např. ticker)
+        open_positions = pd.merge(open_positions_filtered, data, on='ISIN', how='left')
 
-    # Výpočet hodnoty pozice (Počet akcií * Aktuální cena)
-    open_positions['Hodnota pozice'] = open_positions['Počet_x'] * open_positions['Aktuální Cena']
-    logging.debug(f"Otevřené pozice s hodnotou: \n{open_positions}")
+        # Filtrujeme pouze transakce, které se vztahují k aktuálnímu měsíci nebo dříve
+        open_positions = open_positions[open_positions['Month'] <= month]
 
-    # Výpočet hodnoty portfolia v čase - kumulativně podle data
-    portfolio_value_over_time = open_positions.groupby('Datum')['Hodnota pozice'].sum().cumsum().reset_index()
-    logging.debug(f"Výpočet hodnoty portfolia v čase: \n{portfolio_value_over_time}")
+        # Odstraníme duplicity, abychom měli pouze poslední záznam pro každý ISIN
+        open_positions = open_positions.drop_duplicates(subset='ISIN', keep='last')
 
-    # Získání poslední hodnoty z kumulativního součtu
-    last_portfolio_value = portfolio_value_over_time['Hodnota pozice'].iloc[-1]
+        # Získání tickeru pro každou neprodanou pozici
+        open_positions['Ticker'] = open_positions['ISIN'].apply(get_ticker_from_isin)
 
-    # Výpočet celkové aktuální hodnoty portfolia
-    total_portfolio_value = calculate_portfolio_value(data)
+        # Získání aktuální ceny pro každou neprodanou pozici pomocí Polygon API
+        open_positions['Aktuální Cena'] = open_positions['Ticker'].apply(get_delayed_price_polygon)
 
-    # Porovnáme poslední kumulativní hodnotu s aktuální hodnotou portfolia
-    if not last_portfolio_value == total_portfolio_value:
-        logging.warning(f"Poslední kumulativní hodnota ({last_portfolio_value}) se neshoduje s aktuální hodnotou portfolia ({total_portfolio_value}).")
+        # Výpočet hodnoty pozice (Počet akcií * Aktuální cena)
+        open_positions['Hodnota pozice'] = open_positions['Počet_x'] * open_positions['Aktuální Cena']
 
-    return portfolio_value_over_time
+        # Výpočet celkové hodnoty portfolia za daný měsíc - součet hodnot všech neprodaných pozic
+        total_portfolio_value = open_positions['Hodnota pozice'].sum()
+
+        # Uložení výsledků do seznamů
+        dates.append(month.to_timestamp().strftime('%Y-%m-%d'))
+        values.append(total_portfolio_value)
+
+        logging.debug(f"Hodnota portfolia za měsíc {month}: {total_portfolio_value}")
+
+    return dates, values
 
 @portfolio_bp.route('/view/<int:portfolio_id>', methods=['GET'])
 @login_required
@@ -1164,20 +1175,16 @@ def view_portfolio(portfolio_id):
     try:
         data = pd.read_csv(pd.compat.StringIO(portfolio.data))
         # Vypočítej hodnotu portfolia v čase
-        portfolio_value_over_time = calculate_open_positions_portfolio_value(data)
+        portfolio_dates, portfolio_values = calculate_monthly_portfolio_values(data)
     except Exception as e:
         flash(f'Chyba při zpracování dat portfolia: {str(e)}', 'error')
         return redirect(url_for('portfolio.upload'))
-
-    # Připrav data pro JavaScript - převod na seznam
-    portfolio_dates = portfolio_value_over_time['Datum'].dt.strftime('%Y-%m-%d').tolist()
-    portfolio_values = portfolio_value_over_time['Hodnota pozice'].tolist()
 
     # Debug výpisy pro kontrolu dat, která budou odeslána do JavaScriptu
     logging.debug(f"Portfolio Dates pro JS: {portfolio_dates}")
     logging.debug(f"Portfolio Values pro JS: {portfolio_values}")
 
-    return render_template('process.html', portfolio_dates=portfolio_dates, portfolio_values=portfolio_values) 
+    return render_template('process.html', portfolio_dates=portfolio_dates, portfolio_values=portfolio_values)
 
 
 def get_country_from_isin(isin):
